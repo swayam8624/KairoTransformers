@@ -49,6 +49,48 @@ export namespace kairo::transformers
         }
     };
 
+    struct RopeConfig final
+    {
+        float theta = 10000.0f;
+        float scale = 1.0f;
+        bool enabled = true;
+    };
+
+    struct AttentionShape final
+    {
+        std::size_t batch = 0;
+        std::size_t sequence = 0;
+        std::size_t heads = 0;
+        std::size_t headWidth = 0;
+
+        [[nodiscard]]
+        std::size_t QueryElementCount() const noexcept
+        {
+            return batch * sequence * heads * headWidth;
+        }
+
+        [[nodiscard]]
+        std::size_t ScoreElementCount() const noexcept
+        {
+            return batch * heads * sequence * sequence;
+        }
+    };
+
+    struct KVCacheDesc final
+    {
+        std::size_t batch = 0;
+        std::size_t maxSequence = 0;
+        std::size_t layers = 0;
+        std::size_t heads = 0;
+        std::size_t headWidth = 0;
+
+        [[nodiscard]]
+        std::size_t ElementCount() const noexcept
+        {
+            return 2 * batch * maxSequence * layers * heads * headWidth;
+        }
+    };
+
     struct TokenBatch final
     {
         std::size_t batchSize = 0;
@@ -68,6 +110,40 @@ export namespace kairo::transformers
     inline float CausalMaskValue(std::size_t row, std::size_t column) noexcept
     {
         return column > row ? -1.0e30f : 0.0f;
+    }
+
+    [[nodiscard]]
+    inline AttentionShape MakeAttentionShape(
+        const TransformerConfig& config,
+        std::size_t batch,
+        std::size_t sequence)
+    {
+        if (!config.Valid() || sequence > config.contextLength)
+        {
+            throw std::logic_error("Invalid transformer attention shape.");
+        }
+        return {
+            .batch = batch,
+            .sequence = sequence,
+            .heads = config.headCount,
+            .headWidth = config.HeadWidth()
+        };
+    }
+
+    [[nodiscard]]
+    inline KVCacheDesc MakeKVCacheDesc(const TransformerConfig& config, std::size_t batch)
+    {
+        if (!config.Valid())
+        {
+            throw std::logic_error("Invalid transformer config.");
+        }
+        return {
+            .batch = batch,
+            .maxSequence = config.contextLength,
+            .layers = config.layerCount,
+            .heads = config.headCount,
+            .headWidth = config.HeadWidth()
+        };
     }
 
     [[nodiscard]]
