@@ -15,3 +15,6 @@ target_sources(KairoTransformers
 
 add_executable(KairoTransformersSmoke tests/smoke.cpp)
 target_link_libraries(KairoTransformersSmoke PRIVATE KairoTransformers)
+
+enable_testing()
+add_test(NAME KairoTransformersSmoke COMMAND KairoTransformersSmoke)
