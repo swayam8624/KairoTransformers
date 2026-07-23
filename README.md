@@ -50,11 +50,18 @@ KairoTransformers starts with the pieces every later implementation needs:
 - symmetric per-output-column INT8 dense weights with Float32 accumulation.
 - `BoundedTensorArchive`: atomic indexed checkpoints that seek one tensor at a
   time under a caller-provided byte budget, plus layer-at-a-time streaming.
+- `TrainableDecoder`: Tensor-autograd token embeddings, multi-head causal
+  attention, pre-norm residual blocks, exact GELU feed-forward layers, and
+  language-model cross-entropy.
+- accumulated multi-sequence gradients divided once at the optimizer boundary,
+  with full parameter/AdamW/RNG checkpoint restoration.
 
 The runtime test verifies every cached token position against full-sequence
 logits with RoPE enabled, repeats seeded generation exactly, bounds INT8 output
 error, rejects over-budget archive reads, and proves layer streaming keeps only
-the current layer map resident.
+the current layer map resident. A separate training test overfits a repeating
+next-token corpus to 100% accuracy and loss below 0.03, then proves resumed and
+uninterrupted transformer training remain bit-for-bit identical.
 
 This keeps transformer model code separate from the tensor runtime while making
 the required tensor shapes explicit.
@@ -81,6 +88,6 @@ ctest --test-dir build --output-on-failure
 
 1. Grouped-query and multi-query attention cache layouts.
 2. INT4 block quantization and memory-mapped safetensors metadata.
-3. Autodiff transformer training, accumulation, checkpointing, and LoRA.
+3. LoRA adapters and activation-recomputation checkpointing.
 4. Tokenizer adapters and imported-checkpoint naming maps.
 5. Tokens/second, peak RSS, and quantized numerical benchmark manifests.
