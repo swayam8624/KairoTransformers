@@ -1,7 +1,16 @@
-import Kairo.Transformers;
-import Kairo.Foundation.Math.Tensor;
-
 #include <cassert>
+#include <cmath>
+#include <cstddef>
+#include <filesystem>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+import Kairo.Transformers;
+import Kairo.Transformers.Runtime;
+import Kairo.Transformers.Weights;
+import Kairo.Foundation.Math.Tensor;
 
 int main()
 {
@@ -82,5 +91,105 @@ int main()
     const auto decoder = kairo::transformers::DecoderBlock(twoHead, multiQuery, blockWeights);
     assert(decoder.Dim(0) == 2 && decoder.Dim(1) == 4);
     assert(decoder(0, 0) != multiQuery(0, 0));
+
+    twoHead.vocabularySize = 6;
+    twoHead.contextLength = 8;
+    kairo::transformers::DecoderModelWeights modelWeights{
+        .tokenEmbedding = Tensor<float>({ 6, 4 }, {
+            0.1f, 0.2f, 0.3f, 0.4f,
+            0.5f, -0.2f, 0.1f, 0.3f,
+            -0.1f, 0.4f, 0.2f, -0.3f,
+            0.7f, 0.1f, -0.2f, 0.2f,
+            -0.4f, 0.3f, 0.6f, 0.1f,
+            0.2f, -0.5f, 0.4f, 0.8f
+        }),
+        .blocks = { blockWeights },
+        .finalNormScale = Tensor<float>({ 4 }, 1.0f),
+        .finalNormBias = Tensor<float>({ 4 }, 0.0f),
+        .languageModelHead = Tensor<float>({ 4, 6 }, {
+            0.2f, -0.1f, 0.3f, 0.1f, -0.2f, 0.4f,
+            -0.3f, 0.2f, 0.1f, 0.5f, 0.3f, -0.1f,
+            0.4f, 0.1f, -0.2f, 0.2f, 0.6f, 0.3f,
+            0.1f, 0.5f, 0.2f, -0.4f, 0.1f, 0.2f
+        }),
+        .languageModelBias = Tensor<float>({ 6 }, 0.0f)
+    };
+    const kairo::transformers::DecoderModel model(twoHead, modelWeights);
+    const std::vector<std::size_t> prompt{ 1, 4, 2 };
+    const Tensor<float> fullLogits = model.Forward(prompt);
+    kairo::transformers::KVCache runtimeCache(twoHead);
+    Tensor<float> cachedLogits;
+    for (std::size_t position = 0; position < prompt.size(); ++position)
+    {
+        cachedLogits = model.Decode(prompt[position], position, runtimeCache);
+        for (std::size_t token = 0; token < twoHead.vocabularySize; ++token)
+            assert(std::abs(cachedLogits(0, token) - fullLogits(position, token)) < 1e-5f);
+    }
+    assert(runtimeCache.Length(0) == prompt.size());
+
+    kairo::transformers::SamplingConfig sampling{
+        .temperature = 0.8f,
+        .topK = 3,
+        .topP = 0.9f,
+        .seed = 12345
+    };
+    const auto firstGeneration = model.Generate(prompt, 3, sampling);
+    const auto secondGeneration = model.Generate(prompt, 3, sampling);
+    assert(firstGeneration == secondGeneration);
+    assert(firstGeneration.size() == prompt.size() + 3);
+
+    const Tensor<float> denseWeight({ 4, 3 }, {
+        0.12f, -0.31f, 0.52f,
+        -0.44f, 0.23f, 0.71f,
+        0.35f, 0.08f, -0.63f,
+        0.91f, -0.57f, 0.19f
+    });
+    const auto quantized = kairo::transformers::QuantizeInt8(denseWeight);
+    assert(quantized.StorageBytes() < denseWeight.Size() * sizeof(float));
+    const Tensor<float> quantizedInput({ 2, 4 }, {
+        1.0f, -0.5f, 0.25f, 0.75f,
+        -0.2f, 0.8f, -0.7f, 0.1f
+    });
+    const Tensor<float> floatProduct =
+        kairo::foundation::math::MatMul(quantizedInput, denseWeight);
+    const Tensor<float> quantizedProduct =
+        kairo::transformers::QuantizedMatMul(quantizedInput, quantized);
+    for (std::size_t index = 0; index < floatProduct.Size(); ++index)
+        assert(std::abs(floatProduct[index] - quantizedProduct[index]) < 0.01f);
+
+    const std::filesystem::path archivePath =
+        std::filesystem::temp_directory_path() / "kairo-transformer-weights.bin";
+    std::filesystem::remove(archivePath);
+    kairo::transformers::BoundedTensorArchive::Save(archivePath, {
+        { "embedding", modelWeights.tokenEmbedding },
+        { "layers.0.weight", denseWeight },
+        { "layers.1.weight", denseWeight * 2.0f }
+    });
+    const kairo::transformers::BoundedTensorArchive archive(archivePath);
+    assert(archive.TensorCount() == 3);
+    const Tensor<float> loadedEmbedding =
+        archive.Load("embedding", modelWeights.tokenEmbedding.Size() * sizeof(float));
+    assert(loadedEmbedding(4, 2) == modelWeights.tokenEmbedding(4, 2));
+    bool budgetRejected = false;
+    try
+    {
+        (void)archive.Load("embedding", sizeof(float));
+    }
+    catch (const std::length_error&)
+    {
+        budgetRejected = true;
+    }
+    assert(budgetRejected);
+    std::size_t streamedLayers = 0;
+    archive.ForEachLayer(2, { "weight" }, denseWeight.Size() * sizeof(float),
+        [&](std::size_t layer,
+            const std::unordered_map<std::string, Tensor<float>>& resident)
+        {
+            assert(resident.size() == 1);
+            assert(resident.at("weight")(0, 0) == denseWeight(0, 0) * (layer + 1));
+            ++streamedLayers;
+        });
+    assert(streamedLayers == 2);
+    std::filesystem::remove(archivePath);
     return 0;
 }

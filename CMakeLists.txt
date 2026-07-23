@@ -13,7 +13,10 @@ target_sources(KairoTransformers
     PUBLIC
         FILE_SET CXX_MODULES
         BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src
-        FILES src/KairoTransformers.cppm
+        FILES
+            src/KairoTransformers.cppm
+            src/KairoTransformerRuntime.cppm
+            src/KairoTransformerWeights.cppm
 )
 target_link_libraries(KairoTransformers PUBLIC KairoMath)
 

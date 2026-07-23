@@ -43,6 +43,18 @@ KairoTransformers starts with the pieces every later implementation needs:
 - `DecoderBlockWeights` and `DecoderBlock`: a shape-checked pre-norm,
   decoder-only block with Q/K/V/output projections, causal multi-head
   attention, MLP, and both residual paths.
+- token embedding lookup, RoPE, and affine RMSNorm primitives.
+- `KVCache`: per-layer contiguous append and stable incremental attention.
+- `DecoderModel`: multi-layer full-sequence logits, one-token cached decoding,
+  and deterministic temperature/top-k/top-p generation.
+- symmetric per-output-column INT8 dense weights with Float32 accumulation.
+- `BoundedTensorArchive`: atomic indexed checkpoints that seek one tensor at a
+  time under a caller-provided byte budget, plus layer-at-a-time streaming.
+
+The runtime test verifies every cached token position against full-sequence
+logits with RoPE enabled, repeats seeded generation exactly, bounds INT8 output
+error, rejects over-budget archive reads, and proves layer streaming keeps only
+the current layer map resident.
 
 This keeps transformer model code separate from the tensor runtime while making
 the required tensor shapes explicit.
@@ -65,9 +77,10 @@ ctest --test-dir build --output-on-failure
 ./build/KairoTransformersSmoke
 ```
 
-## Roadmap
+## Remaining Work
 
-1. Tensor-backed embeddings and rotary positions.
-2. KV-cache incremental decoding and a multi-layer decoder model wrapper.
-3. Checkpoint loading and ONNX graph lowering.
-4. Training after tensor autodiff and optimizer foundations are stable.
+1. Grouped-query and multi-query attention cache layouts.
+2. INT4 block quantization and memory-mapped safetensors metadata.
+3. Autodiff transformer training, accumulation, checkpointing, and LoRA.
+4. Tokenizer adapters and imported-checkpoint naming maps.
+5. Tokens/second, peak RSS, and quantized numerical benchmark manifests.
