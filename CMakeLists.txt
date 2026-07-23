@@ -25,7 +25,13 @@ add_executable(KairoTransformersSmoke tests/smoke.cpp)
 target_link_libraries(KairoTransformersSmoke PRIVATE KairoTransformers)
 add_executable(KairoTransformerTrainingSmoke tests/training.cpp)
 target_link_libraries(KairoTransformerTrainingSmoke PRIVATE KairoTransformers)
+add_executable(KairoTransformerBenchmark tests/benchmark.cpp)
+target_link_libraries(KairoTransformerBenchmark PRIVATE KairoTransformers)
 
 enable_testing()
 add_test(NAME KairoTransformersSmoke COMMAND KairoTransformersSmoke)
 add_test(NAME KairoTransformerTrainingSmoke COMMAND KairoTransformerTrainingSmoke)
+add_test(
+    NAME KairoTransformerBenchmark
+    COMMAND KairoTransformerBenchmark
+        "${CMAKE_CURRENT_BINARY_DIR}/transformer_benchmark.json")
