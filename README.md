@@ -48,7 +48,8 @@ KairoTransformers starts with the pieces every later implementation needs:
 - token embedding lookup, RoPE, and affine RMSNorm primitives.
 - grouped-query attention and its single-KV-head multi-query specialization.
 - abstract tokenizer/vocabulary interface plus a lossless UTF-8 byte tokenizer.
-- `KVCache`: per-layer contiguous append and stable incremental attention.
+- `KVCache`: per-layer contiguous append and stable incremental attention,
+  including compressed grouped/multi-query storage that retains only KV heads.
 - `DecoderModel`: multi-layer full-sequence logits, one-token cached decoding,
   explicit greedy decoding, and deterministic temperature/top-k/top-p
   generation.
@@ -107,8 +108,7 @@ ctest --test-dir build --output-on-failure
 
 ## Remaining Work
 
-1. Grouped-query and multi-query KV-cache layouts.
-2. Memory-mapped safetensors metadata.
-3. Activation-recomputation checkpointing.
-4. Production tokenizer adapters and external checkpoint naming adapters.
-5. Larger-model benchmark baselines and CI regression comparison history.
+1. Memory-mapped safetensors metadata.
+2. Activation-recomputation checkpointing.
+3. Production tokenizer adapters and external checkpoint naming adapters.
+4. Larger-model benchmark baselines and CI regression comparison history.

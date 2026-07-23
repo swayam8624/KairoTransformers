@@ -129,16 +129,31 @@ export namespace kairo::transformers
     class KVCache final
     {
     public:
-        KVCache(const TransformerConfig& config, std::size_t batchSize = 1)
+        KVCache(
+            const TransformerConfig& config,
+            std::size_t batchSize = 1,
+            std::size_t keyValueHeads = 0)
             : config_(config), batchSize_(batchSize),
+              keyValueHeads_(keyValueHeads == 0 ? config.headCount : keyValueHeads),
               keys_({ config.layerCount, batchSize, config.contextLength,
-                  config.headCount, config.HeadWidth() }, 0.0f),
+                  keyValueHeads_, config.HeadWidth() }, 0.0f),
               values_(keys_.GetShape(), 0.0f),
               lengths_(config.layerCount, 0)
         {
-            if (!config.Valid() || batchSize != 1)
+            if (!config.Valid() || batchSize != 1 || keyValueHeads_ == 0
+                || config.headCount % keyValueHeads_ != 0)
                 throw std::invalid_argument(
-                    "KVCache currently requires a valid config and batch size one.");
+                    "KVCache requires a valid config, batch one, and divisible KV heads.");
+        }
+
+        [[nodiscard]] std::size_t KeyValueHeads() const noexcept
+        {
+            return keyValueHeads_;
+        }
+
+        [[nodiscard]] std::size_t StorageElements() const noexcept
+        {
+            return keys_.Size() + values_.Size();
         }
 
         void Clear()
@@ -163,11 +178,12 @@ export namespace kairo::transformers
             if (layer >= config_.layerCount || position >= config_.contextLength
                 || key.Rank() != 2 || value.Rank() != 2
                 || key.Dim(0) != 1 || value.Dim(0) != 1
-                || key.Dim(1) != config_.modelWidth || value.Dim(1) != config_.modelWidth
+                || key.Dim(1) != keyValueHeads_ * config_.HeadWidth()
+                || value.Dim(1) != keyValueHeads_ * config_.HeadWidth()
                 || position != lengths_[layer])
                 throw std::invalid_argument("KVCache Append must be contiguous and shape-compatible.");
             const std::size_t headWidth = config_.HeadWidth();
-            for (std::size_t head = 0; head < config_.headCount; ++head)
+            for (std::size_t head = 0; head < keyValueHeads_; ++head)
                 for (std::size_t channel = 0; channel < headWidth; ++channel)
                 {
                     keys_.At({ layer, 0, position, head, channel }) =
@@ -188,17 +204,20 @@ export namespace kairo::transformers
             const std::size_t length = lengths_[layer];
             const std::size_t headWidth = config_.HeadWidth();
             const float inverseScale = 1.0f / std::sqrt(static_cast<float>(headWidth));
+            const std::size_t queryHeadsPerKV = config_.headCount / keyValueHeads_;
             Tensor<float> output({ 1, config_.modelWidth }, 0.0f);
             std::vector<float> scores(length);
             for (std::size_t head = 0; head < config_.headCount; ++head)
             {
+                const std::size_t keyValueHead = head / queryHeadsPerKV;
                 float maximum = -std::numeric_limits<float>::infinity();
                 for (std::size_t position = 0; position < length; ++position)
                 {
                     float score = 0.0f;
                     for (std::size_t channel = 0; channel < headWidth; ++channel)
                         score += query(0, head * headWidth + channel)
-                            * keys_.At({ layer, 0, position, head, channel });
+                            * keys_.At({
+                                layer, 0, position, keyValueHead, channel });
                     scores[position] = score * inverseScale;
                     maximum = std::max(maximum, scores[position]);
                 }
@@ -212,7 +231,8 @@ export namespace kairo::transformers
                     for (std::size_t position = 0; position < length; ++position)
                         output(0, head * headWidth + channel) +=
                             scores[position] / denominator
-                            * values_.At({ layer, 0, position, head, channel });
+                            * values_.At({
+                                layer, 0, position, keyValueHead, channel });
             }
             return output;
         }
@@ -220,6 +240,7 @@ export namespace kairo::transformers
     private:
         TransformerConfig config_;
         std::size_t batchSize_;
+        std::size_t keyValueHeads_;
         Tensor<float> keys_;
         Tensor<float> values_;
         std::vector<std::size_t> lengths_;

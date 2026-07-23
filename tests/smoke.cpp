@@ -83,6 +83,23 @@ int main()
         multiQuery, sharedKey, sharedValue, 2, 1);
     assert(multiQueryOutput.Dim(1) == 4);
     assert(multiQueryOutput(0, 0) == 3.0f && multiQueryOutput(0, 2) == 3.0f);
+    kairo::transformers::KVCache groupedCache(twoHead, 1, 1);
+    kairo::transformers::KVCache fullHeadCache(twoHead);
+    assert(groupedCache.StorageElements() * 2 == fullHeadCache.StorageElements());
+    for (std::size_t position = 0; position < 2; ++position)
+    {
+        const Tensor<float> oneKey =
+            sharedKey.Slice(0, position, 1);
+        const Tensor<float> oneValue =
+            sharedValue.Slice(0, position, 1);
+        groupedCache.Append(0, position, oneKey, oneValue);
+        const Tensor<float> oneQuery =
+            multiQuery.Slice(0, position, 1);
+        const Tensor<float> cachedGrouped = groupedCache.Attend(0, oneQuery);
+        for (std::size_t channel = 0; channel < 4; ++channel)
+            assert(std::abs(cachedGrouped(0, channel)
+                - multiQueryOutput(position, channel)) < 1e-6f);
+    }
 
     kairo::transformers::ByteTokenizer tokenizer;
     const std::string tokenizerText = "Kairo \xF0\x9F\xA7\xA0";
