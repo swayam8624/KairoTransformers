@@ -36,5 +36,19 @@ int main()
     const auto attended = kairo::transformers::CausalScaledDotProductAttention(query, key, value);
     assert(attended(0, 0) == 3.0f && attended(0, 1) == 4.0f);
     assert(attended(1, 0) > 3.0f && attended(1, 0) < 7.0f);
+
+    kairo::transformers::TransformerConfig twoHead{};
+    twoHead.vocabularySize = 8;
+    twoHead.contextLength = 2;
+    twoHead.modelWidth = 4;
+    twoHead.headCount = 2;
+    twoHead.layerCount = 1;
+    twoHead.feedForwardWidth = 8;
+    const Tensor<float> multiQuery({ 2, 4 }, { 1, 0, 1, 0, 0, 1, 0, 1 });
+    const Tensor<float> multiValue({ 2, 4 }, { 3, 4, 30, 40, 7, 8, 70, 80 });
+    const auto multi = kairo::transformers::MultiHeadCausalAttention(twoHead, multiQuery, multiQuery, multiValue);
+    assert(multi(0, 0) == 3.0f && multi(0, 2) == 30.0f);
+    assert(multi(1, 0) > 3.0f && multi(1, 0) < 7.0f);
+    assert(multi(1, 2) > 30.0f && multi(1, 2) < 70.0f);
     return 0;
 }

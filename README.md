@@ -36,6 +36,8 @@ KairoTransformers starts with the pieces every later implementation needs:
 - `ParameterCountEstimate`: sizing and planning.
 - Tensor-backed row-wise `LayerNorm` and GELU activation.
 - Single-head causal scaled-dot-product attention over `[sequence, headWidth]`.
+- `MultiHeadCausalAttention` for packed `[sequence, modelWidth]` Q/K/V
+  tensors, using `TransformerConfig` head planning and per-head causal masking.
 
 This keeps transformer model code separate from the tensor runtime while making
 the required tensor shapes explicit.
@@ -61,7 +63,7 @@ ctest --test-dir build --output-on-failure
 ## Roadmap
 
 1. Tensor-backed embeddings and rotary positions.
-2. Multi-head attention and MLP blocks.
+2. MLP blocks and residual composition.
 3. Decoder-only inference.
 4. KV-cache incremental decoding.
 5. Checkpoint loading.

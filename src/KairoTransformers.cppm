@@ -256,4 +256,52 @@ export namespace kairo::transformers
         }
         return output;
     }
+
+    /// Input: query/key/value [sequence, modelWidth] and a valid transformer
+    /// config. Each contiguous model-width row is split into `headCount`
+    /// logical heads, attended causally, then packed back in the same layout.
+    [[nodiscard]]
+    inline Tensor<float> MultiHeadCausalAttention(
+        const TransformerConfig& config,
+        const Tensor<float>& query,
+        const Tensor<float>& key,
+        const Tensor<float>& value)
+    {
+        if (!config.Valid() || query.Rank() != 2 || key.Rank() != 2 || value.Rank() != 2
+            || query.Dim(0) == 0 || query.Dim(0) > config.contextLength
+            || query.Dim(1) != config.modelWidth || key.Dim(0) != query.Dim(0)
+            || key.Dim(1) != config.modelWidth || value.Dim(0) != query.Dim(0)
+            || value.Dim(1) != config.modelWidth)
+        {
+            throw std::invalid_argument("MultiHeadCausalAttention expects matching [sequence, modelWidth] tensors and a valid config.");
+        }
+        const std::size_t sequence = query.Dim(0);
+        const std::size_t headWidth = config.HeadWidth();
+        Tensor<float> output({ sequence, config.modelWidth });
+        for (std::size_t head = 0; head < config.headCount; ++head)
+        {
+            Tensor<float> headQuery({ sequence, headWidth });
+            Tensor<float> headKey({ sequence, headWidth });
+            Tensor<float> headValue({ sequence, headWidth });
+            const std::size_t offset = head * headWidth;
+            for (std::size_t row = 0; row < sequence; ++row)
+            {
+                for (std::size_t channel = 0; channel < headWidth; ++channel)
+                {
+                    headQuery(row, channel) = query(row, offset + channel);
+                    headKey(row, channel) = key(row, offset + channel);
+                    headValue(row, channel) = value(row, offset + channel);
+                }
+            }
+            const Tensor<float> attended = CausalScaledDotProductAttention(headQuery, headKey, headValue);
+            for (std::size_t row = 0; row < sequence; ++row)
+            {
+                for (std::size_t channel = 0; channel < headWidth; ++channel)
+                {
+                    output(row, offset + channel) = attended(row, channel);
+                }
+            }
+        }
+        return output;
+    }
 }
