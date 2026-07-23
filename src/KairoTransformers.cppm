@@ -213,6 +213,74 @@ export namespace kairo::transformers
         });
     }
 
+    /// Input: a sequence length, even/odd model width, and positive frequency
+    /// base. Output: [sequence, modelWidth] deterministic sinusoidal positions.
+    /// Even channels contain sine and odd channels contain cosine.
+    [[nodiscard]]
+    inline Tensor<float> SinusoidalEncoding(
+        std::size_t sequence,
+        std::size_t modelWidth,
+        float frequencyBase = 10000.0f)
+    {
+        if (sequence == 0 || modelWidth == 0 || !(frequencyBase > 1.0f))
+            throw std::invalid_argument(
+                "SinusoidalEncoding requires non-zero dimensions and base > 1.");
+        Tensor<float> output({ sequence, modelWidth }, 0.0f);
+        for (std::size_t position = 0; position < sequence; ++position)
+            for (std::size_t channel = 0; channel < modelWidth; channel += 2)
+            {
+                const float exponent =
+                    static_cast<float>(channel) / static_cast<float>(modelWidth);
+                const float angle =
+                    static_cast<float>(position) / std::pow(frequencyBase, exponent);
+                output(position, channel) = std::sin(angle);
+                if (channel + 1 < modelWidth)
+                    output(position, channel + 1) = std::cos(angle);
+            }
+        return output;
+    }
+
+    struct QKVProjection final
+    {
+        Tensor<float> query;
+        Tensor<float> key;
+        Tensor<float> value;
+    };
+
+    /// Executes one [inputWidth, 3 * outputWidth] projection and splits its
+    /// contiguous output channels into Q, K, and V tensors. This is the public
+    /// fusion boundary used by optimized CPU and GPU backends.
+    [[nodiscard]]
+    inline QKVProjection FusedQKVProjection(
+        const Tensor<float>& input,
+        const Tensor<float>& weight,
+        const Tensor<float>& bias)
+    {
+        if (input.Rank() != 2 || weight.Rank() != 2 || bias.Rank() != 1
+            || input.Dim(1) != weight.Dim(0) || weight.Dim(1) == 0
+            || weight.Dim(1) % 3 != 0 || bias.Dim(0) != weight.Dim(1))
+            throw std::invalid_argument(
+                "FusedQKVProjection expects [rows,input], [input,3*output], [3*output].");
+        Tensor<float> packed = MatMul(input, weight);
+        for (std::size_t row = 0; row < packed.Dim(0); ++row)
+            for (std::size_t column = 0; column < packed.Dim(1); ++column)
+                packed(row, column) += bias[column];
+        const std::size_t width = packed.Dim(1) / 3;
+        QKVProjection output{
+            .query = Tensor<float>({ packed.Dim(0), width }),
+            .key = Tensor<float>({ packed.Dim(0), width }),
+            .value = Tensor<float>({ packed.Dim(0), width })
+        };
+        for (std::size_t row = 0; row < packed.Dim(0); ++row)
+            for (std::size_t column = 0; column < width; ++column)
+            {
+                output.query(row, column) = packed(row, column);
+                output.key(row, column) = packed(row, width + column);
+                output.value(row, column) = packed(row, 2 * width + column);
+            }
+        return output;
+    }
+
     /// Input: query/key/value tensors [sequence, headWidth].
     /// Output: causal scaled-dot-product attention [sequence, headWidth].
     /// No allocation or state from a previous call is retained; KV caching is

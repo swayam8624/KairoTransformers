@@ -243,6 +243,18 @@ export namespace kairo::transformers
         std::uint64_t seed = 0x4B4149524F4C4DULL;
     };
 
+    /// Returns the lowest token id among equal maximum logits. This explicit
+    /// deterministic path does not consume random state.
+    [[nodiscard]] inline std::size_t GreedyToken(const Tensor<float>& logits)
+    {
+        if (logits.Rank() != 1 || logits.Empty())
+            throw std::invalid_argument("GreedyToken expects non-empty rank-one logits.");
+        std::size_t selected = 0;
+        for (std::size_t token = 1; token < logits.Size(); ++token)
+            if (logits[token] > logits[selected]) selected = token;
+        return selected;
+    }
+
     [[nodiscard]] inline std::size_t SampleLogits(
         const Tensor<float>& logits,
         SamplingConfig config,
@@ -369,6 +381,28 @@ export namespace kairo::transformers
             {
                 Tensor<float> last = logits.Slice(0, 0, 1).Reshape({ config_.vocabularySize });
                 const std::size_t token = SampleLogits(last, sampling, random);
+                tokens.push_back(token);
+                if (generated + 1 < newTokenCount)
+                    logits = Decode(token, tokens.size() - 1, cache);
+            }
+            return tokens;
+        }
+
+        [[nodiscard]] std::vector<std::size_t> GenerateGreedy(
+            std::vector<std::size_t> tokens,
+            std::size_t newTokenCount) const
+        {
+            if (tokens.empty() || tokens.size() + newTokenCount > config_.contextLength)
+                throw std::invalid_argument("GenerateGreedy prompt/output exceeds context.");
+            KVCache cache(config_);
+            Tensor<float> logits;
+            for (std::size_t position = 0; position < tokens.size(); ++position)
+                logits = Decode(tokens[position], position, cache);
+            for (std::size_t generated = 0; generated < newTokenCount; ++generated)
+            {
+                const Tensor<float> last =
+                    logits.Slice(0, 0, 1).Reshape({ config_.vocabularySize });
+                const std::size_t token = GreedyToken(last);
                 tokens.push_back(token);
                 if (generated + 1 < newTokenCount)
                     logits = Decode(token, tokens.size() - 1, cache);

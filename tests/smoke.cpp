@@ -39,6 +39,18 @@ int main()
     assert(normalized(0, 0) < 0.0f && normalized(0, 1) > 0.0f);
     const auto gelu = kairo::transformers::GELU(activations);
     assert(gelu(1, 1) > gelu(1, 0));
+    const auto positions = kairo::transformers::SinusoidalEncoding(2, 3);
+    assert(positions(0, 0) == 0.0f && positions(0, 1) == 1.0f);
+    assert(std::abs(positions(1, 0) - std::sin(1.0f)) < 1e-6f);
+    const Tensor<float> packedWeight({ 2, 6 }, {
+        1, 0, 2, 0, 3, 0,
+        0, 1, 0, 2, 0, 3
+    });
+    const auto projected = kairo::transformers::FusedQKVProjection(
+        activations, packedWeight, Tensor<float>({ 6 }, 0.0f));
+    assert(projected.query(0, 0) == 1.0f && projected.query(0, 1) == 3.0f);
+    assert(projected.key(0, 0) == 2.0f && projected.key(0, 1) == 6.0f);
+    assert(projected.value(0, 0) == 3.0f && projected.value(0, 1) == 9.0f);
 
     const Tensor<float> query({ 2, 2 }, { 1.0f, 0.0f, 0.0f, 1.0f });
     const Tensor<float> key({ 2, 2 }, { 1.0f, 0.0f, 0.0f, 1.0f });
@@ -132,8 +144,13 @@ int main()
         .languageModelBias = Tensor<float>({ 6 }, 0.0f)
     };
     const kairo::transformers::DecoderModel model(twoHead, modelWeights);
+    assert(kairo::transformers::GreedyToken(
+        Tensor<float>({ 4 }, { 1.0f, 3.0f, 3.0f, 2.0f })) == 1);
     const std::vector<std::size_t> prompt{ 1, 4, 2 };
     const Tensor<float> fullLogits = model.Forward(prompt);
+    const auto greedyFirst = model.GenerateGreedy(prompt, 2);
+    const auto greedySecond = model.GenerateGreedy(prompt, 2);
+    assert(greedyFirst == greedySecond);
     kairo::transformers::KVCache runtimeCache(twoHead);
     Tensor<float> cachedLogits;
     for (std::size_t position = 0; position < prompt.size(); ++position)

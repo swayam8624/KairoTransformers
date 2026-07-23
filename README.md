@@ -35,6 +35,8 @@ KairoTransformers starts with the pieces every later implementation needs:
 - `CausalMaskValue`: scalar causal-mask definition.
 - `ParameterCountEstimate`: sizing and planning.
 - Tensor-backed row-wise `LayerNorm` and GELU activation.
+- deterministic sinusoidal positional encoding and RoPE.
+- one-matmul fused QKV projection with an explicit backend fusion boundary.
 - Single-head causal scaled-dot-product attention over `[sequence, headWidth]`.
 - `MultiHeadCausalAttention` for packed `[sequence, modelWidth]` Q/K/V
   tensors, using `TransformerConfig` head planning and per-head causal masking.
@@ -48,7 +50,8 @@ KairoTransformers starts with the pieces every later implementation needs:
 - abstract tokenizer/vocabulary interface plus a lossless UTF-8 byte tokenizer.
 - `KVCache`: per-layer contiguous append and stable incremental attention.
 - `DecoderModel`: multi-layer full-sequence logits, one-token cached decoding,
-  and deterministic temperature/top-k/top-p generation.
+  explicit greedy decoding, and deterministic temperature/top-k/top-p
+  generation.
 - symmetric per-output-column INT8 and packed INT4 dense weights with Float32
   accumulation and declared numerical-error tests.
 - `BoundedTensorArchive`: atomic indexed checkpoints that seek one tensor at a
