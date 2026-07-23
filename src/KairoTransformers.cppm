@@ -1,14 +1,20 @@
 module;
 
 #include <cstddef>
+#include <algorithm>
+#include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 export module Kairo.Transformers;
 
+import Kairo.Foundation.Math.Tensor;
+
 export namespace kairo::transformers
 {
+    using kairo::foundation::math::Tensor;
     enum class Activation
     {
         ReLU,
@@ -159,5 +165,95 @@ export namespace kairo::transformers
         const std::size_t mlpPerLayer = 2 * config.modelWidth * config.feedForwardWidth;
         const std::size_t normsPerLayer = 4 * config.modelWidth;
         return embeddings + config.layerCount * (attentionPerLayer + mlpPerLayer + normsPerLayer);
+    }
+
+    /// Input: [rows, width] activations plus [width] scale and bias vectors.
+    /// Output: row-wise LayerNorm with epsilon-stabilized variance.
+    [[nodiscard]]
+    inline Tensor<float> LayerNorm(
+        const Tensor<float>& input,
+        const Tensor<float>& scale,
+        const Tensor<float>& bias,
+        float epsilon = 1e-5f)
+    {
+        if (input.Rank() != 2 || scale.Rank() != 1 || bias.Rank() != 1
+            || scale.Dim(0) != input.Dim(1) || bias.Dim(0) != input.Dim(1) || !(epsilon > 0.0f))
+        {
+            throw std::invalid_argument("LayerNorm expects [rows,width], [width], [width], and positive epsilon.");
+        }
+        Tensor<float> output(input.GetShape());
+        const float inverseWidth = 1.0f / static_cast<float>(input.Dim(1));
+        for (std::size_t row = 0; row < input.Dim(0); ++row)
+        {
+            float mean = 0.0f;
+            for (std::size_t column = 0; column < input.Dim(1); ++column) mean += input(row, column);
+            mean *= inverseWidth;
+            float variance = 0.0f;
+            for (std::size_t column = 0; column < input.Dim(1); ++column)
+            {
+                const float delta = input(row, column) - mean;
+                variance += delta * delta;
+            }
+            const float inverseStdDev = 1.0f / std::sqrt(variance * inverseWidth + epsilon);
+            for (std::size_t column = 0; column < input.Dim(1); ++column)
+            {
+                output(row, column) = (input(row, column) - mean) * inverseStdDev * scale[column] + bias[column];
+            }
+        }
+        return output;
+    }
+
+    [[nodiscard]]
+    inline Tensor<float> GELU(const Tensor<float>& input)
+    {
+        return input.Map([](float value)
+        {
+            constexpr float kSqrtTwoOverPi = 0.7978845608f;
+            return 0.5f * value * (1.0f + std::tanh(kSqrtTwoOverPi * (value + 0.044715f * value * value * value)));
+        });
+    }
+
+    /// Input: query/key/value tensors [sequence, headWidth].
+    /// Output: causal scaled-dot-product attention [sequence, headWidth].
+    /// No allocation or state from a previous call is retained; KV caching is
+    /// intentionally a separate incremental-decoding layer.
+    [[nodiscard]]
+    inline Tensor<float> CausalScaledDotProductAttention(
+        const Tensor<float>& query,
+        const Tensor<float>& key,
+        const Tensor<float>& value)
+    {
+        if (query.Rank() != 2 || key.Rank() != 2 || value.Rank() != 2
+            || query.GetShape() != key.GetShape() || query.GetShape() != value.GetShape()
+            || query.Dim(0) == 0 || query.Dim(1) == 0)
+        {
+            throw std::invalid_argument("CausalScaledDotProductAttention expects matching non-empty [sequence,headWidth] tensors.");
+        }
+        const std::size_t sequence = query.Dim(0);
+        const std::size_t width = query.Dim(1);
+        const float inverseScale = 1.0f / std::sqrt(static_cast<float>(width));
+        Tensor<float> output({ sequence, width });
+        std::vector<float> scores(sequence);
+        for (std::size_t row = 0; row < sequence; ++row)
+        {
+            float maxScore = -std::numeric_limits<float>::infinity();
+            for (std::size_t column = 0; column <= row; ++column)
+            {
+                float score = 0.0f;
+                for (std::size_t channel = 0; channel < width; ++channel) score += query(row, channel) * key(column, channel);
+                score *= inverseScale;
+                scores[column] = score;
+                maxScore = std::max(maxScore, score);
+            }
+            float sum = 0.0f;
+            for (std::size_t column = 0; column <= row; ++column) { scores[column] = std::exp(scores[column] - maxScore); sum += scores[column]; }
+            for (std::size_t channel = 0; channel < width; ++channel)
+            {
+                float attended = 0.0f;
+                for (std::size_t column = 0; column <= row; ++column) attended += (scores[column] / sum) * value(column, channel);
+                output(row, channel) = attended;
+            }
+        }
+        return output;
     }
 }

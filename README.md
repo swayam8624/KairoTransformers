@@ -1,8 +1,9 @@
 # KairoTransformers
 
 KairoTransformers is the transformer-model package for the Kairo ML stack. It
-defines transformer configuration, shape planning, causal masking, and KV-cache
-metadata before implementing full inference and training.
+defines transformer configuration, Tensor-backed CPU inference primitives,
+causal masking, and KV-cache metadata before implementing full inference and
+training.
 
 ## Problem
 
@@ -33,6 +34,8 @@ KairoTransformers starts with the pieces every later implementation needs:
 - `RopeConfig`: rotary-position metadata.
 - `CausalMaskValue`: scalar causal-mask definition.
 - `ParameterCountEstimate`: sizing and planning.
+- Tensor-backed row-wise `LayerNorm` and GELU activation.
+- Single-head causal scaled-dot-product attention over `[sequence, headWidth]`.
 
 This keeps transformer model code separate from the tensor runtime while making
 the required tensor shapes explicit.
@@ -57,11 +60,9 @@ ctest --test-dir build --output-on-failure
 
 ## Roadmap
 
-1. Tensor-backed embeddings.
-2. LayerNorm and GELU kernels.
-3. Scaled dot-product attention.
-4. Multi-head attention and MLP blocks.
-5. Decoder-only inference.
-6. KV-cache incremental decoding.
-7. Checkpoint loading.
-8. Training after tensor autodiff and optimizer foundations are stable.
+1. Tensor-backed embeddings and rotary positions.
+2. Multi-head attention and MLP blocks.
+3. Decoder-only inference.
+4. KV-cache incremental decoding.
+5. Checkpoint loading.
+6. Training after tensor autodiff and optimizer foundations are stable.
