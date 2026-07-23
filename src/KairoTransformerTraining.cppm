@@ -39,6 +39,56 @@ export namespace kairo::transformers
         std::uint64_t optimizerStep = 0;
     };
 
+    /// Low-rank trainable update for a frozen dense matrix:
+    /// output = input*base + (alpha/rank)*(input*down)*up.
+    class LoRAProjection final
+    {
+    public:
+        LoRAProjection(
+            std::size_t inputWidth,
+            std::size_t outputWidth,
+            std::size_t rank,
+            float alpha,
+            std::uint64_t seed = 0x4C4F5241ULL)
+            : scale_(alpha / static_cast<float>(rank)),
+              down_(Tensor<float>({ inputWidth, rank }, 0.0f), true),
+              up_(Tensor<float>({ rank, outputWidth }, 0.0f), true)
+        {
+            if (inputWidth == 0 || outputWidth == 0 || rank == 0 || !(alpha > 0.0f))
+                throw std::invalid_argument("LoRAProjection dimensions and alpha must be positive.");
+            TrainingRandom random(seed);
+            Tensor<float> initialized({ inputWidth, rank }, 0.0f);
+            const float bound = 1.0f / std::sqrt(static_cast<float>(inputWidth));
+            for (std::size_t index = 0; index < initialized.Size(); ++index)
+                initialized[index] = (random.Uniform() * 2.0f - 1.0f) * bound;
+            down_.LoadValue(std::move(initialized));
+        }
+
+        [[nodiscard]] Variable Forward(
+            const Variable& input, const Tensor<float>& frozenBase) const
+        {
+            if (frozenBase.Rank() != 2
+                || frozenBase.Dim(0) != down_.Value().Dim(0)
+                || frozenBase.Dim(1) != up_.Value().Dim(1))
+                throw std::invalid_argument("LoRA frozen base shape mismatch.");
+            const Variable base = AutogradMatMul(input, Variable(frozenBase));
+            const Variable lowRank =
+                AutogradMatMul(AutogradMatMul(input, down_), up_);
+            const Variable scale(Tensor<float>(lowRank.Value().GetShape(), scale_));
+            return Add(base, kairo::foundation::math::Multiply(lowRank, scale));
+        }
+
+        [[nodiscard]] std::vector<Variable*> Parameters()
+        {
+            return { &down_, &up_ };
+        }
+
+    private:
+        float scale_;
+        Variable down_;
+        Variable up_;
+    };
+
     namespace training_detail
     {
         [[nodiscard]] inline Tensor<float> RandomTensor(

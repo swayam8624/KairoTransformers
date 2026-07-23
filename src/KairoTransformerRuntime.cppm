@@ -7,6 +7,8 @@ module;
 #include <limits>
 #include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -19,6 +21,46 @@ import Kairo.Foundation.Math.TensorTraining;
 export namespace kairo::transformers
 {
     using kairo::foundation::math::TrainingRandom;
+
+    class Tokenizer
+    {
+    public:
+        virtual ~Tokenizer() = default;
+        [[nodiscard]] virtual std::size_t VocabularySize() const noexcept = 0;
+        [[nodiscard]] virtual std::vector<std::size_t> Encode(
+            std::string_view text) const = 0;
+        [[nodiscard]] virtual std::string Decode(
+            std::span<const std::size_t> tokens) const = 0;
+    };
+
+    class ByteTokenizer final : public Tokenizer
+    {
+    public:
+        [[nodiscard]] std::size_t VocabularySize() const noexcept override { return 256; }
+
+        [[nodiscard]] std::vector<std::size_t> Encode(
+            std::string_view text) const override
+        {
+            std::vector<std::size_t> tokens;
+            tokens.reserve(text.size());
+            for (unsigned char byte : text) tokens.push_back(byte);
+            return tokens;
+        }
+
+        [[nodiscard]] std::string Decode(
+            std::span<const std::size_t> tokens) const override
+        {
+            std::string text;
+            text.reserve(tokens.size());
+            for (std::size_t token : tokens)
+            {
+                if (token >= VocabularySize())
+                    throw std::out_of_range("ByteTokenizer token exceeds vocabulary.");
+                text.push_back(static_cast<char>(token));
+            }
+            return text;
+        }
+    };
 
     [[nodiscard]] inline Tensor<float> TokenEmbedding(
         std::span<const std::size_t> tokens,

@@ -305,6 +305,62 @@ export namespace kairo::transformers
         return output;
     }
 
+    /// Query heads are divided evenly among fewer key/value heads.
+    /// `keyValueHeads == 1` is multi-query attention.
+    [[nodiscard]]
+    inline Tensor<float> GroupedQueryCausalAttention(
+        const Tensor<float>& query,
+        const Tensor<float>& key,
+        const Tensor<float>& value,
+        std::size_t queryHeads,
+        std::size_t keyValueHeads)
+    {
+        if (query.Rank() != 2 || key.Rank() != 2 || value.Rank() != 2
+            || query.Dim(0) == 0 || key.Dim(0) != query.Dim(0)
+            || value.Dim(0) != query.Dim(0) || queryHeads == 0
+            || keyValueHeads == 0 || queryHeads % keyValueHeads != 0
+            || query.Dim(1) % queryHeads != 0)
+            throw std::invalid_argument("GroupedQueryCausalAttention received incompatible tensors.");
+        const std::size_t headWidth = query.Dim(1) / queryHeads;
+        if (key.Dim(1) != keyValueHeads * headWidth
+            || value.Dim(1) != keyValueHeads * headWidth)
+            throw std::invalid_argument("Grouped-query key/value width mismatch.");
+        const std::size_t sequence = query.Dim(0);
+        const std::size_t queriesPerKV = queryHeads / keyValueHeads;
+        const float inverseScale = 1.0f / std::sqrt(static_cast<float>(headWidth));
+        Tensor<float> output(query.GetShape(), 0.0f);
+        std::vector<float> scores(sequence);
+        for (std::size_t queryHead = 0; queryHead < queryHeads; ++queryHead)
+        {
+            const std::size_t keyValueHead = queryHead / queriesPerKV;
+            for (std::size_t row = 0; row < sequence; ++row)
+            {
+                float maximum = -std::numeric_limits<float>::infinity();
+                for (std::size_t column = 0; column <= row; ++column)
+                {
+                    float score = 0.0f;
+                    for (std::size_t channel = 0; channel < headWidth; ++channel)
+                        score += query(row, queryHead * headWidth + channel)
+                            * key(column, keyValueHead * headWidth + channel);
+                    scores[column] = score * inverseScale;
+                    maximum = std::max(maximum, scores[column]);
+                }
+                float denominator = 0.0f;
+                for (std::size_t column = 0; column <= row; ++column)
+                {
+                    scores[column] = std::exp(scores[column] - maximum);
+                    denominator += scores[column];
+                }
+                for (std::size_t column = 0; column <= row; ++column)
+                    for (std::size_t channel = 0; channel < headWidth; ++channel)
+                        output(row, queryHead * headWidth + channel) +=
+                            scores[column] / denominator
+                            * value(column, keyValueHead * headWidth + channel);
+            }
+        }
+        return output;
+    }
+
     /// Input: activations [sequence, modelWidth], dense weights
     /// [modelWidth, feedForwardWidth] and [feedForwardWidth, modelWidth], and
     /// their matching bias vectors. Output preserves [sequence, modelWidth].

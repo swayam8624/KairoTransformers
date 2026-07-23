@@ -44,10 +44,13 @@ KairoTransformers starts with the pieces every later implementation needs:
   decoder-only block with Q/K/V/output projections, causal multi-head
   attention, MLP, and both residual paths.
 - token embedding lookup, RoPE, and affine RMSNorm primitives.
+- grouped-query attention and its single-KV-head multi-query specialization.
+- abstract tokenizer/vocabulary interface plus a lossless UTF-8 byte tokenizer.
 - `KVCache`: per-layer contiguous append and stable incremental attention.
 - `DecoderModel`: multi-layer full-sequence logits, one-token cached decoding,
   and deterministic temperature/top-k/top-p generation.
-- symmetric per-output-column INT8 dense weights with Float32 accumulation.
+- symmetric per-output-column INT8 and packed INT4 dense weights with Float32
+  accumulation and declared numerical-error tests.
 - `BoundedTensorArchive`: atomic indexed checkpoints that seek one tensor at a
   time under a caller-provided byte budget, plus layer-at-a-time streaming.
 - `TrainableDecoder`: Tensor-autograd token embeddings, multi-head causal
@@ -55,6 +58,8 @@ KairoTransformers starts with the pieces every later implementation needs:
   language-model cross-entropy.
 - accumulated multi-sequence gradients divided once at the optimizer boundary,
   with full parameter/AdamW/RNG checkpoint restoration.
+- `LoRAProjection`: frozen-base dense execution plus trainable low-rank
+  adapters initialized with a zero-output update.
 
 The runtime test verifies every cached token position against full-sequence
 logits with RoPE enabled, repeats seeded generation exactly, bounds INT8 output
@@ -86,8 +91,8 @@ ctest --test-dir build --output-on-failure
 
 ## Remaining Work
 
-1. Grouped-query and multi-query attention cache layouts.
-2. INT4 block quantization and memory-mapped safetensors metadata.
-3. LoRA adapters and activation-recomputation checkpointing.
-4. Tokenizer adapters and imported-checkpoint naming maps.
+1. Grouped-query and multi-query KV-cache layouts.
+2. Memory-mapped safetensors metadata.
+3. Activation-recomputation checkpointing.
+4. Production tokenizer adapters and imported-checkpoint naming maps.
 5. Tokens/second, peak RSS, and quantized numerical benchmark manifests.

@@ -37,6 +37,19 @@ export namespace kairo::transformers
         }
     };
 
+    struct QuantizedMatrixInt4 final
+    {
+        std::size_t rows = 0;
+        std::size_t columns = 0;
+        std::vector<std::uint8_t> packedValues;
+        std::vector<float> columnScales;
+
+        [[nodiscard]] std::size_t StorageBytes() const noexcept
+        {
+            return packedValues.size() + columnScales.size() * sizeof(float);
+        }
+    };
+
     /// Symmetric per-output-column INT8 quantization for dense weights
     /// [inputWidth,outputWidth]. Zero columns use scale one and remain zero.
     [[nodiscard]] inline QuantizedMatrixInt8 QuantizeInt8(const Tensor<float>& weight)
@@ -97,6 +110,66 @@ export namespace kairo::transformers
                 for (std::size_t inner = 0; inner < weight.rows; ++inner)
                     sum += input(row, inner)
                         * static_cast<float>(weight.values[inner * weight.columns + column]);
+                output(row, column) = sum * weight.columnScales[column];
+            }
+        return output;
+    }
+
+    [[nodiscard]] inline QuantizedMatrixInt4 QuantizeInt4(const Tensor<float>& weight)
+    {
+        if (weight.Rank() != 2 || weight.Empty())
+            throw std::invalid_argument("QuantizeInt4 expects a non-empty rank-2 weight.");
+        QuantizedMatrixInt4 result{
+            .rows = weight.Dim(0),
+            .columns = weight.Dim(1),
+            .packedValues = std::vector<std::uint8_t>((weight.Size() + 1) / 2, 0),
+            .columnScales = std::vector<float>(weight.Dim(1), 1.0f)
+        };
+        for (std::size_t column = 0; column < weight.Dim(1); ++column)
+        {
+            float maximum = 0.0f;
+            for (std::size_t row = 0; row < weight.Dim(0); ++row)
+                maximum = std::max(maximum, std::abs(weight(row, column)));
+            const float scale = maximum == 0.0f ? 1.0f : maximum / 7.0f;
+            result.columnScales[column] = scale;
+            for (std::size_t row = 0; row < weight.Dim(0); ++row)
+            {
+                const int quantized = static_cast<int>(std::clamp(
+                    std::round(weight(row, column) / scale), -7.0f, 7.0f));
+                const std::size_t linear = row * weight.Dim(1) + column;
+                const std::uint8_t nibble = static_cast<std::uint8_t>(quantized + 8);
+                if ((linear & 1u) == 0)
+                    result.packedValues[linear / 2] = static_cast<std::uint8_t>(
+                        (result.packedValues[linear / 2] & 0xF0u) | nibble);
+                else
+                    result.packedValues[linear / 2] = static_cast<std::uint8_t>(
+                        (result.packedValues[linear / 2] & 0x0Fu) | (nibble << 4));
+            }
+        }
+        return result;
+    }
+
+    [[nodiscard]] inline Tensor<float> QuantizedMatMul(
+        const Tensor<float>& input, const QuantizedMatrixInt4& weight)
+    {
+        if (input.Rank() != 2 || input.Dim(1) != weight.rows
+            || weight.packedValues.size() != (weight.rows * weight.columns + 1) / 2
+            || weight.columnScales.size() != weight.columns)
+            throw std::invalid_argument("INT4 QuantizedMatMul shape mismatch.");
+        Tensor<float> output({ input.Dim(0), weight.columns }, 0.0f);
+        for (std::size_t row = 0; row < input.Dim(0); ++row)
+            for (std::size_t column = 0; column < weight.columns; ++column)
+            {
+                float sum = 0.0f;
+                for (std::size_t inner = 0; inner < weight.rows; ++inner)
+                {
+                    const std::size_t linear = inner * weight.columns + column;
+                    const std::uint8_t packed = weight.packedValues[linear / 2];
+                    const std::uint8_t nibble =
+                        (linear & 1u) == 0 ? packed & 0x0Fu : packed >> 4;
+                    sum += input(row, inner)
+                        * static_cast<float>(static_cast<int>(nibble) - 8);
+                }
                 output(row, column) = sum * weight.columnScales[column];
             }
         return output;

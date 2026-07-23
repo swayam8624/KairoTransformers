@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -59,6 +60,22 @@ int main()
     assert(multi(0, 0) == 3.0f && multi(0, 2) == 30.0f);
     assert(multi(1, 0) > 3.0f && multi(1, 0) < 7.0f);
     assert(multi(1, 2) > 30.0f && multi(1, 2) < 70.0f);
+    const auto groupedEquivalent = kairo::transformers::GroupedQueryCausalAttention(
+        multiQuery, multiQuery, multiValue, 2, 2);
+    for (std::size_t index = 0; index < multi.Size(); ++index)
+        assert(std::abs(groupedEquivalent[index] - multi[index]) < 1e-6f);
+    const Tensor<float> sharedKey({ 2, 2 }, { 1, 0, 0, 1 });
+    const Tensor<float> sharedValue({ 2, 2 }, { 3, 4, 7, 8 });
+    const auto multiQueryOutput = kairo::transformers::GroupedQueryCausalAttention(
+        multiQuery, sharedKey, sharedValue, 2, 1);
+    assert(multiQueryOutput.Dim(1) == 4);
+    assert(multiQueryOutput(0, 0) == 3.0f && multiQueryOutput(0, 2) == 3.0f);
+
+    kairo::transformers::ByteTokenizer tokenizer;
+    const std::string tokenizerText = "Kairo \xF0\x9F\xA7\xA0";
+    const auto encodedText = tokenizer.Encode(tokenizerText);
+    assert(tokenizer.VocabularySize() == 256);
+    assert(tokenizer.Decode(encodedText) == tokenizerText);
 
     twoHead.activation = kairo::transformers::Activation::ReLU;
     const Tensor<float> firstWeight({ 4, 8 }, 1.0f);
@@ -156,6 +173,15 @@ int main()
         kairo::transformers::QuantizedMatMul(quantizedInput, quantized);
     for (std::size_t index = 0; index < floatProduct.Size(); ++index)
         assert(std::abs(floatProduct[index] - quantizedProduct[index]) < 0.01f);
+    const auto quantizedInt4 = kairo::transformers::QuantizeInt4(denseWeight);
+    assert(quantizedInt4.StorageBytes() < quantized.StorageBytes());
+    const Tensor<float> int4Product =
+        kairo::transformers::QuantizedMatMul(quantizedInput, quantizedInt4);
+    float maximumInt4Error = 0.0f;
+    for (std::size_t index = 0; index < floatProduct.Size(); ++index)
+        maximumInt4Error = std::max(
+            maximumInt4Error, std::abs(floatProduct[index] - int4Product[index]));
+    assert(maximumInt4Error < 0.18f);
 
     const std::filesystem::path archivePath =
         std::filesystem::temp_directory_path() / "kairo-transformer-weights.bin";

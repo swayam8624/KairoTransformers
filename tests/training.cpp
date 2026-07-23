@@ -5,6 +5,8 @@
 
 import Kairo.Transformers;
 import Kairo.Transformers.Training;
+import Kairo.Foundation.Math.Tensor;
+import Kairo.Foundation.Math.TensorAutograd;
 import Kairo.Foundation.Math.TensorTraining;
 
 int main()
@@ -61,6 +63,34 @@ int main()
         for (std::size_t index = 0; index < modelParameters[parameter]->Value().Size(); ++index)
             assert(restoredParameters[parameter]->Value()[index]
                 == modelParameters[parameter]->Value()[index]);
+
+    using kairo::foundation::math::MeanSquaredLoss;
+    using kairo::foundation::math::Tensor;
+    using kairo::foundation::math::Variable;
+    const Tensor<float> adapterInputs({ 4, 2 }, {
+        1, 0, 0, 1, 1, 1, -1, 0.5f
+    });
+    const Tensor<float> frozenBase({ 2, 2 }, 0.0f);
+    const Tensor<float> adapterTargets({ 4, 2 }, {
+        2, -1, 0.5f, 3, 2.5f, 2, -1.75f, 2.5f
+    });
+    LoRAProjection adapter(2, 2, 2, 2.0f, 77);
+    kairo::foundation::math::TensorOptimizer adapterOptimizer(
+        DefaultTransformerAdamW(0.05f));
+    float adapterLoss = 0.0f;
+    for (std::size_t step = 0; step < 400; ++step)
+    {
+        auto adapterParameters = adapter.Parameters();
+        for (Variable* parameter : adapterParameters) parameter->ZeroGradient();
+        const Variable output = adapter.Forward(Variable(adapterInputs), frozenBase);
+        const Variable loss = MeanSquaredLoss(output, adapterTargets);
+        adapterLoss = loss.Value()[0];
+        loss.Backward();
+        adapterOptimizer.Step(adapterParameters);
+    }
+    assert(adapterLoss < 1e-4f);
+    for (std::size_t index = 0; index < frozenBase.Size(); ++index)
+        assert(frozenBase[index] == 0.0f);
     std::filesystem::remove(checkpoint);
     return 0;
 }
