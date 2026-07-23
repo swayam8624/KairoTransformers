@@ -64,6 +64,8 @@ KairoTransformers starts with the pieces every later implementation needs:
   language-model cross-entropy.
 - accumulated multi-sequence gradients divided once at the optimizer boundary,
   with full parameter/AdamW/RNG checkpoint restoration.
+- optional per-layer activation recomputation through KairoMath checkpoints,
+  with retained/recomputed gradient equivalence tests.
 - `LoRAProjection`: frozen-base dense execution plus trainable low-rank
   adapters initialized with a zero-output update.
 
@@ -109,6 +111,5 @@ ctest --test-dir build --output-on-failure
 ## Remaining Work
 
 1. Memory-mapped safetensors metadata.
-2. Activation-recomputation checkpointing.
-3. Production tokenizer adapters and external checkpoint naming adapters.
-4. Larger-model benchmark baselines and CI regression comparison history.
+2. Production tokenizer adapters and external checkpoint naming adapters.
+3. Larger-model benchmark baselines and CI regression comparison history.

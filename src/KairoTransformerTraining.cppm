@@ -21,6 +21,7 @@ export namespace kairo::transformers
 {
     using kairo::foundation::math::Add;
     using kairo::foundation::math::AutogradGELU;
+    using kairo::foundation::math::AutogradCheckpoint;
     using kairo::foundation::math::AutogradGatherRows;
     using kairo::foundation::math::AutogradLayerNormLastDim;
     using kairo::foundation::math::AutogradMatMul;
@@ -157,6 +158,14 @@ export namespace kairo::transformers
 
         [[nodiscard]] const TransformerConfig& Config() const noexcept { return config_; }
         [[nodiscard]] TrainingRandom& Random() noexcept { return random_; }
+        void SetGradientCheckpointing(bool enabled) noexcept
+        {
+            gradientCheckpointing_ = enabled;
+        }
+        [[nodiscard]] bool GradientCheckpointing() const noexcept
+        {
+            return gradientCheckpointing_;
+        }
 
         [[nodiscard]] std::vector<Variable*> Parameters()
         {
@@ -179,21 +188,18 @@ export namespace kairo::transformers
             if (inputTokens.empty() || inputTokens.size() > config_.contextLength)
                 throw std::invalid_argument("Transformer training input exceeds context.");
             Variable hidden = AutogradGatherRows(embedding_, inputTokens);
-            for (const auto& layer : layers_)
+            for (std::size_t layer = 0; layer < layers_.size(); ++layer)
             {
-                const Variable attentionInput = AutogradLayerNormLastDim(hidden, 1e-5f);
-                const Variable query = AutogradMatMul(attentionInput, layer.query);
-                const Variable key = AutogradMatMul(attentionInput, layer.key);
-                const Variable value = AutogradMatMul(attentionInput, layer.value);
-                const Variable attended = AutogradMultiHeadCausalAttention(
-                    query, key, value, config_.headCount);
-                hidden = Add(hidden, AutogradMatMul(attended, layer.attentionOutput));
-                const Variable feedForwardInput =
-                    AutogradLayerNormLastDim(hidden, 1e-5f);
-                const Variable feedForward = AutogradGELU(
-                    AutogradMatMul(feedForwardInput, layer.feedForwardFirst));
-                hidden = Add(
-                    hidden, AutogradMatMul(feedForward, layer.feedForwardSecond));
+                if (gradientCheckpointing_)
+                {
+                    const Variable checkpointInput = hidden;
+                    hidden = AutogradCheckpoint([this, checkpointInput, layer]
+                    {
+                        return ForwardLayer(checkpointInput, layers_[layer]);
+                    });
+                }
+                else
+                    hidden = ForwardLayer(hidden, layers_[layer]);
             }
             return AutogradMatMul(
                 AutogradLayerNormLastDim(hidden, 1e-5f), languageHead_);
@@ -289,6 +295,28 @@ export namespace kairo::transformers
         Variable embedding_;
         std::vector<training_detail::Layer> layers_;
         Variable languageHead_;
+        bool gradientCheckpointing_ = false;
+
+        [[nodiscard]] Variable ForwardLayer(
+            const Variable& input,
+            const training_detail::Layer& layer) const
+        {
+            const Variable attentionInput =
+                AutogradLayerNormLastDim(input, 1e-5f);
+            const Variable query = AutogradMatMul(attentionInput, layer.query);
+            const Variable key = AutogradMatMul(attentionInput, layer.key);
+            const Variable value = AutogradMatMul(attentionInput, layer.value);
+            const Variable attended = AutogradMultiHeadCausalAttention(
+                query, key, value, config_.headCount);
+            Variable hidden =
+                Add(input, AutogradMatMul(attended, layer.attentionOutput));
+            const Variable feedForwardInput =
+                AutogradLayerNormLastDim(hidden, 1e-5f);
+            const Variable feedForward = AutogradGELU(
+                AutogradMatMul(feedForwardInput, layer.feedForwardFirst));
+            return Add(
+                hidden, AutogradMatMul(feedForward, layer.feedForwardSecond));
+        }
     };
 
     [[nodiscard]] inline TensorOptimizerConfig DefaultTransformerAdamW(

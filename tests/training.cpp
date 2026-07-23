@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
 #include <vector>
@@ -29,6 +30,23 @@ int main()
         { 1, 2, 3, 0, 1, 2, 3 },
         { 3, 0, 1, 2, 3, 0, 1 }
     };
+
+    TrainableDecoder retainedGraph(config, 4321);
+    TrainableDecoder recomputedGraph(config, 4321);
+    recomputedGraph.SetGradientCheckpointing(true);
+    assert(recomputedGraph.GradientCheckpointing());
+    const auto retainedLoss = retainedGraph.Loss(inputs[0], targets[0]);
+    const auto recomputedLoss = recomputedGraph.Loss(inputs[0], targets[0]);
+    assert(retainedLoss.Value()[0] == recomputedLoss.Value()[0]);
+    retainedLoss.Backward();
+    recomputedLoss.Backward();
+    const auto retainedParameters = retainedGraph.Parameters();
+    const auto recomputedParameters = recomputedGraph.Parameters();
+    for (std::size_t parameter = 0; parameter < retainedParameters.size(); ++parameter)
+        for (std::size_t index = 0;
+             index < retainedParameters[parameter]->Gradient().Size(); ++index)
+            assert(std::abs(retainedParameters[parameter]->Gradient()[index]
+                - recomputedParameters[parameter]->Gradient()[index]) < 1e-5f);
 
     TrainableDecoder model(config, 1234);
     kairo::foundation::math::TensorOptimizer optimizer(
