@@ -60,5 +60,27 @@ int main()
     assert(feedForward.Dim(0) == 2 && feedForward.Dim(1) == 4 && feedForward(0, 0) > 0.0f);
     const auto residual = kairo::transformers::AddResidual(multiQuery, feedForward);
     assert(residual(0, 0) > multiQuery(0, 0));
+
+    kairo::transformers::DecoderBlockWeights blockWeights{
+        .attentionNormScale = Tensor<float>({ 4 }, 1.0f),
+        .attentionNormBias = Tensor<float>({ 4 }, 0.0f),
+        .queryWeight = Tensor<float>({ 4, 4 }, { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 }),
+        .queryBias = Tensor<float>({ 4 }, 0.0f),
+        .keyWeight = Tensor<float>({ 4, 4 }, { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 }),
+        .keyBias = Tensor<float>({ 4 }, 0.0f),
+        .valueWeight = Tensor<float>({ 4, 4 }, { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 }),
+        .valueBias = Tensor<float>({ 4 }, 0.0f),
+        .attentionOutputWeight = Tensor<float>({ 4, 4 }, { 0.1f, 0, 0, 0, 0, 0.1f, 0, 0, 0, 0, 0.1f, 0, 0, 0, 0, 0.1f }),
+        .attentionOutputBias = Tensor<float>({ 4 }, 0.0f),
+        .feedForwardNormScale = Tensor<float>({ 4 }, 1.0f),
+        .feedForwardNormBias = Tensor<float>({ 4 }, 0.0f),
+        .feedForwardFirstWeight = Tensor<float>({ 4, 8 }, 1.0f),
+        .feedForwardFirstBias = Tensor<float>({ 8 }, 0.0f),
+        .feedForwardSecondWeight = Tensor<float>({ 8, 4 }, 0.1f),
+        .feedForwardSecondBias = Tensor<float>({ 4 }, 0.0f)
+    };
+    const auto decoder = kairo::transformers::DecoderBlock(twoHead, multiQuery, blockWeights);
+    assert(decoder.Dim(0) == 2 && decoder.Dim(1) == 4);
+    assert(decoder(0, 0) != multiQuery(0, 0));
     return 0;
 }

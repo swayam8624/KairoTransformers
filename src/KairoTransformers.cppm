@@ -348,4 +348,78 @@ export namespace kairo::transformers
             if (input.Dim(axis) != branch.Dim(axis)) throw std::invalid_argument("Residual tensors must have equal shapes.");
         return input + branch;
     }
+
+    /// All learned parameters for one pre-norm decoder-only transformer block.
+    /// Dense matrices are row-major Tensor shapes [inputWidth, outputWidth].
+    struct DecoderBlockWeights final
+    {
+        Tensor<float> attentionNormScale;
+        Tensor<float> attentionNormBias;
+        Tensor<float> queryWeight;
+        Tensor<float> queryBias;
+        Tensor<float> keyWeight;
+        Tensor<float> keyBias;
+        Tensor<float> valueWeight;
+        Tensor<float> valueBias;
+        Tensor<float> attentionOutputWeight;
+        Tensor<float> attentionOutputBias;
+        Tensor<float> feedForwardNormScale;
+        Tensor<float> feedForwardNormBias;
+        Tensor<float> feedForwardFirstWeight;
+        Tensor<float> feedForwardFirstBias;
+        Tensor<float> feedForwardSecondWeight;
+        Tensor<float> feedForwardSecondBias;
+    };
+
+    [[nodiscard]]
+    inline Tensor<float> Dense(
+        const Tensor<float>& input,
+        const Tensor<float>& weight,
+        const Tensor<float>& bias)
+    {
+        if (input.Rank() != 2 || weight.Rank() != 2 || bias.Rank() != 1
+            || input.Dim(1) != weight.Dim(0) || weight.Dim(1) != bias.Dim(0))
+        {
+            throw std::invalid_argument("Dense expects [rows,input], [input,output], and [output] tensors.");
+        }
+        Tensor<float> output = MatMul(input, weight);
+        for (std::size_t row = 0; row < output.Dim(0); ++row)
+            for (std::size_t column = 0; column < output.Dim(1); ++column) output(row, column) += bias[column];
+        return output;
+    }
+
+    /// Input: token activations [sequence, modelWidth] and all parameters for
+    /// one decoder block. Output: same shape after pre-norm attention and MLP
+    /// residual branches. This path is causal and stateless; use a future KV
+    /// cache component for incremental decoding rather than reusing its output.
+    [[nodiscard]]
+    inline Tensor<float> DecoderBlock(
+        const TransformerConfig& config,
+        const Tensor<float>& input,
+        const DecoderBlockWeights& weights,
+        float epsilon = 1e-5f)
+    {
+        if (!config.Valid() || input.Rank() != 2 || input.Dim(0) == 0
+            || input.Dim(0) > config.contextLength || input.Dim(1) != config.modelWidth)
+        {
+            throw std::invalid_argument("DecoderBlock expects a non-empty [sequence, modelWidth] input within context.");
+        }
+
+        const Tensor<float> attentionInput = LayerNorm(input, weights.attentionNormScale, weights.attentionNormBias, epsilon);
+        const Tensor<float> query = Dense(attentionInput, weights.queryWeight, weights.queryBias);
+        const Tensor<float> key = Dense(attentionInput, weights.keyWeight, weights.keyBias);
+        const Tensor<float> value = Dense(attentionInput, weights.valueWeight, weights.valueBias);
+        const Tensor<float> attended = MultiHeadCausalAttention(config, query, key, value);
+        const Tensor<float> attentionBranch = Dense(attended, weights.attentionOutputWeight, weights.attentionOutputBias);
+        const Tensor<float> afterAttention = AddResidual(input, attentionBranch);
+        const Tensor<float> feedForwardInput = LayerNorm(afterAttention, weights.feedForwardNormScale, weights.feedForwardNormBias, epsilon);
+        const Tensor<float> feedForwardBranch = FeedForward(
+            config,
+            feedForwardInput,
+            weights.feedForwardFirstWeight,
+            weights.feedForwardFirstBias,
+            weights.feedForwardSecondWeight,
+            weights.feedForwardSecondBias);
+        return AddResidual(afterAttention, feedForwardBranch);
+    }
 }
