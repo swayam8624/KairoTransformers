@@ -17,6 +17,7 @@ target_sources(KairoTransformers
             src/KairoTransformers.cppm
             src/KairoTransformerRuntime.cppm
             src/KairoTransformerWeights.cppm
+            src/KairoTransformerCheckpoint.cppm
             src/KairoTransformerTraining.cppm
 )
 target_link_libraries(KairoTransformers PUBLIC KairoMath)

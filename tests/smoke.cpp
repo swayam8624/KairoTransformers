@@ -11,6 +11,7 @@
 import Kairo.Transformers;
 import Kairo.Transformers.Runtime;
 import Kairo.Transformers.Weights;
+import Kairo.Transformers.Checkpoint;
 import Kairo.Foundation.Math.Tensor;
 
 int main()
@@ -151,6 +152,15 @@ int main()
     const auto greedyFirst = model.GenerateGreedy(prompt, 2);
     const auto greedySecond = model.GenerateGreedy(prompt, 2);
     assert(greedyFirst == greedySecond);
+    const std::filesystem::path decoderCheckpoint =
+        std::filesystem::temp_directory_path() / "kairo-decoder-checkpoint.bin";
+    std::filesystem::remove(decoderCheckpoint);
+    kairo::transformers::SaveDecoderCheckpoint(decoderCheckpoint, modelWeights);
+    auto importedWeights = kairo::transformers::LoadDecoderCheckpoint(
+        decoderCheckpoint, twoHead, 1u << 20);
+    const kairo::transformers::DecoderModel importedModel(
+        twoHead, std::move(importedWeights));
+    assert(importedModel.GenerateGreedy(prompt, 2) == greedyFirst);
     kairo::transformers::KVCache runtimeCache(twoHead);
     Tensor<float> cachedLogits;
     for (std::size_t position = 0; position < prompt.size(); ++position)
@@ -233,6 +243,7 @@ int main()
             ++streamedLayers;
         });
     assert(streamedLayers == 2);
+    std::filesystem::remove(decoderCheckpoint);
     std::filesystem::remove(archivePath);
     return 0;
 }

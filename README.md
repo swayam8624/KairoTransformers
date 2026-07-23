@@ -56,6 +56,8 @@ KairoTransformers starts with the pieces every later implementation needs:
   accumulation and declared numerical-error tests.
 - `BoundedTensorArchive`: atomic indexed checkpoints that seek one tensor at a
   time under a caller-provided byte budget, plus layer-at-a-time streaming.
+- `SaveDecoderCheckpoint`/`LoadDecoderCheckpoint`: stable version-1 names for
+  every decoder tensor and complete bounded reconstruction from disk.
 - `TrainableDecoder`: Tensor-autograd token embeddings, multi-head causal
   attention, pre-norm residual blocks, exact GELU feed-forward layers, and
   language-model cross-entropy.
@@ -65,9 +67,11 @@ KairoTransformers starts with the pieces every later implementation needs:
   adapters initialized with a zero-output update.
 
 The runtime test verifies every cached token position against full-sequence
-logits with RoPE enabled, repeats seeded generation exactly, bounds INT8 output
-error, rejects over-budget archive reads, and proves layer streaming keeps only
-the current layer map resident. A separate training test overfits a repeating
+logits with RoPE enabled, repeats seeded generation exactly, reconstructs a
+complete model from a bounded checkpoint and reproduces greedy generation,
+bounds quantized output error, rejects over-budget archive reads, and proves
+layer streaming keeps only the current layer map resident. A separate training
+test overfits a repeating
 next-token corpus to 100% accuracy and loss below 0.03, then proves resumed and
 uninterrupted transformer training remain bit-for-bit identical.
 
@@ -106,5 +110,5 @@ ctest --test-dir build --output-on-failure
 1. Grouped-query and multi-query KV-cache layouts.
 2. Memory-mapped safetensors metadata.
 3. Activation-recomputation checkpointing.
-4. Production tokenizer adapters and imported-checkpoint naming maps.
+4. Production tokenizer adapters and external checkpoint naming adapters.
 5. Larger-model benchmark baselines and CI regression comparison history.
