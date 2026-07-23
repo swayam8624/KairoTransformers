@@ -50,5 +50,15 @@ int main()
     assert(multi(0, 0) == 3.0f && multi(0, 2) == 30.0f);
     assert(multi(1, 0) > 3.0f && multi(1, 0) < 7.0f);
     assert(multi(1, 2) > 30.0f && multi(1, 2) < 70.0f);
+
+    twoHead.activation = kairo::transformers::Activation::ReLU;
+    const Tensor<float> firstWeight({ 4, 8 }, 1.0f);
+    const Tensor<float> firstBias({ 8 }, 0.0f);
+    const Tensor<float> secondWeight({ 8, 4 }, 0.25f);
+    const Tensor<float> secondBias({ 4 }, 0.0f);
+    const auto feedForward = kairo::transformers::FeedForward(twoHead, multiQuery, firstWeight, firstBias, secondWeight, secondBias);
+    assert(feedForward.Dim(0) == 2 && feedForward.Dim(1) == 4 && feedForward(0, 0) > 0.0f);
+    const auto residual = kairo::transformers::AddResidual(multiQuery, feedForward);
+    assert(residual(0, 0) > multiQuery(0, 0));
     return 0;
 }

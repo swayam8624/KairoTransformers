@@ -304,4 +304,48 @@ export namespace kairo::transformers
         }
         return output;
     }
+
+    /// Input: activations [sequence, modelWidth], dense weights
+    /// [modelWidth, feedForwardWidth] and [feedForwardWidth, modelWidth], and
+    /// their matching bias vectors. Output preserves [sequence, modelWidth].
+    [[nodiscard]]
+    inline Tensor<float> FeedForward(
+        const TransformerConfig& config,
+        const Tensor<float>& input,
+        const Tensor<float>& firstWeight,
+        const Tensor<float>& firstBias,
+        const Tensor<float>& secondWeight,
+        const Tensor<float>& secondBias)
+    {
+        if (!config.Valid() || input.Rank() != 2 || input.Dim(0) == 0 || input.Dim(1) != config.modelWidth
+            || firstWeight.Rank() != 2 || firstWeight.Dim(0) != config.modelWidth || firstWeight.Dim(1) != config.feedForwardWidth
+            || firstBias.Rank() != 1 || firstBias.Dim(0) != config.feedForwardWidth
+            || secondWeight.Rank() != 2 || secondWeight.Dim(0) != config.feedForwardWidth || secondWeight.Dim(1) != config.modelWidth
+            || secondBias.Rank() != 1 || secondBias.Dim(0) != config.modelWidth)
+        {
+            throw std::invalid_argument("FeedForward tensor shapes do not match TransformerConfig.");
+        }
+        Tensor<float> hidden = MatMul(input, firstWeight);
+        for (std::size_t row = 0; row < hidden.Dim(0); ++row)
+            for (std::size_t column = 0; column < hidden.Dim(1); ++column) hidden(row, column) += firstBias[column];
+        switch (config.activation)
+        {
+        case Activation::ReLU: hidden = kairo::foundation::math::ReLU(hidden); break;
+        case Activation::GELU: hidden = GELU(hidden); break;
+        case Activation::SiLU: hidden = hidden.Map([](float value) { return value / (1.0f + std::exp(-value)); }); break;
+        }
+        Tensor<float> output = MatMul(hidden, secondWeight);
+        for (std::size_t row = 0; row < output.Dim(0); ++row)
+            for (std::size_t column = 0; column < output.Dim(1); ++column) output(row, column) += secondBias[column];
+        return output;
+    }
+
+    [[nodiscard]]
+    inline Tensor<float> AddResidual(const Tensor<float>& input, const Tensor<float>& branch)
+    {
+        if (input.Rank() != branch.Rank()) throw std::invalid_argument("Residual tensors must have equal shapes.");
+        for (std::size_t axis = 0; axis < input.Rank(); ++axis)
+            if (input.Dim(axis) != branch.Dim(axis)) throw std::invalid_argument("Residual tensors must have equal shapes.");
+        return input + branch;
+    }
 }
