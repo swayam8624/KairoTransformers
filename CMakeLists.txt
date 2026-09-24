@@ -1,14 +1,33 @@
 cmake_minimum_required(VERSION 3.28)
 project(KairoTransformers LANGUAGES CXX)
 
-set(KAIRO_FOUNDATION_DIR "/Users/swayamsingal/Desktop/Programming/Kairo/Foundation" CACHE PATH "Path to Kairo Foundation.")
-
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(KAIRO_MATH_SOURCE_DIR "" CACHE PATH "Path to a local KairoMath checkout")
+set(KAIRO_MATH_REVISION b0e0bf14d81398c85d16011d6c897c782fa6068a)
+
+if(NOT TARGET KairoMath)
+    if(KAIRO_MATH_SOURCE_DIR AND EXISTS "${KAIRO_MATH_SOURCE_DIR}/CMakeLists.txt")
+        add_subdirectory(
+            "${KAIRO_MATH_SOURCE_DIR}"
+            "${CMAKE_CURRENT_BINARY_DIR}/_deps/KairoMath")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../KairoMath/CMakeLists.txt")
+        add_subdirectory(
+            "${CMAKE_CURRENT_SOURCE_DIR}/../KairoMath"
+            "${CMAKE_CURRENT_BINARY_DIR}/_deps/KairoMath")
+    else()
+        include(FetchContent)
+        FetchContent_Declare(
+            KairoMath
+            GIT_REPOSITORY https://github.com/swayam8624/KairoMath.git
+            GIT_TAG ${KAIRO_MATH_REVISION})
+        FetchContent_MakeAvailable(KairoMath)
+    endif()
+endif()
+
 add_library(KairoTransformers)
-add_subdirectory("${KAIRO_FOUNDATION_DIR}/KairoMath" "${CMAKE_BINARY_DIR}/KairoMath")
 target_sources(KairoTransformers
     PUBLIC
         FILE_SET CXX_MODULES
