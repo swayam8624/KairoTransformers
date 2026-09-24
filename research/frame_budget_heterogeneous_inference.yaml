@@ -1,0 +1,13 @@
+schema: kairo.research-track.v1
+track: R7
+title: Frame-budget-aware heterogeneous inference
+state: hypothesis
+role: autoregressive_decode_workload
+problem: Token decoding changes compute shape over time and is sensitive to cache reuse, batch size and frame pressure.
+hypothesis: Deadline-aware heterogeneous scheduling can reduce decode deadline misses while preserving cached/full numerical equivalence.
+baselines: [cpu_only, gpu_only, static_threshold, offline_oracle]
+workloads: [single_stream_decode, burst_decode, mixed_render_decode, cold_cache, warm_cache]
+metrics: [token_latency_ms_p50, token_latency_ms_p95, tokens_per_second, deadline_miss_rate, transfer_bytes, cached_full_max_abs_error]
+ablations: [no_cache_cost, no_transfer_cost, no_frame_pressure]
+failure_cases: [single_token_tiny_model, cache_thrashing, alternating_contention]
+falsification: Reject if adaptive routing cannot reduce deadline misses over the best fixed baseline after scheduler overhead while maintaining cached/full equivalence.
