@@ -71,3 +71,16 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION
         endif()
     endforeach()
 endif()
+
+# Clang with libstdc++ 14 diagnoses std::aligned_storage inside the standard
+# library as deprecated under C++23 while Tensor templates are instantiated.
+# No Kairo transformer source uses the deprecated facility directly.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND UNIX AND NOT APPLE)
+    foreach(_kairo_target IN ITEMS
+        KairoTransformers
+        KairoTransformersSmoke
+        KairoTransformerTrainingSmoke
+        KairoTransformerBenchmark)
+        target_compile_options(${_kairo_target} PRIVATE -Wno-deprecated-declarations)
+    endforeach()
+endif()
