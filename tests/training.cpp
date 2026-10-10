@@ -1,3 +1,9 @@
+// CMake Release normally defines NDEBUG, which disables C assert(). These
+// executables are acceptance tests: failures must remain observable in CI.
+#if defined(NDEBUG)
+#undef NDEBUG
+#endif
+
 #include <cassert>
 #include <cmath>
 #include <cstddef>
