@@ -1,3 +1,9 @@
+// TEACHING MAP — tests/benchmark.cpp
+// Measures transformer compute and memory costs on controlled tensor shapes; separate
+// model runtime, initialization and I/O rather than claiming arbitrary large-model serving
+// speed.
+// See READING_ORDER.md for the complete model/data/optimizer call path.
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>

@@ -1,3 +1,8 @@
+// TEACHING MAP — tests/training.cpp
+// Validates training and gradient/update behavior on small known fixtures. Checks must
+// isolate learning loss, checkpoint reproducibility and invalid numerical states.
+// See READING_ORDER.md for the complete model/data/optimizer call path.
+
 // CMake Release normally defines NDEBUG, which disables C assert(). These
 // executables are acceptance tests: failures must remain observable in CI.
 #if defined(NDEBUG)

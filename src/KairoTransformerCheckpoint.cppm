@@ -1,3 +1,9 @@
+// TEACHING MAP — src/KairoTransformerCheckpoint.cppm
+// Serializes and restores model/optimizer parameters for reproducible training or
+// inference. Validate shapes/version, avoid partial writes, and compare restored outputs
+// with the original runtime.
+// See READING_ORDER.md for the complete model/data/optimizer call path.
+
 module;
 
 #include <cstddef>

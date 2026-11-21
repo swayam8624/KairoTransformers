@@ -1,3 +1,9 @@
+// TEACHING MAP — src/KairoTransformerRuntime.cppm
+// Runs token-batch decoder computation using validated attention masks, weights and tensor
+// operations. The model execution boundary is separate from gradient updates and training
+// schedules.
+// See READING_ORDER.md for the complete model/data/optimizer call path.
+
 module;
 
 #include <algorithm>

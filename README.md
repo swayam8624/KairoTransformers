@@ -1,3 +1,7 @@
+> **Start here to learn the implementation:** [READING_ORDER.md](READING_ORDER.md) links all source/test files and cross-module APIs.
+>
+> **Open source:** Original KairoTransformers code is available under [MIT](LICENSE) for education, modification and future work. External components retain their licenses. Per-function annotations and native tests are tracked separately.
+
 # KairoTransformers
 
 KairoTransformers is the transformer-model package for the Kairo ML stack. It

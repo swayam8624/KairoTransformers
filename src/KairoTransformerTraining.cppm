@@ -1,3 +1,9 @@
+// TEACHING MAP — src/KairoTransformerTraining.cppm
+// Coordinates loss computation, reverse gradients/optimizer updates and training steps.
+// The runtime computes outputs; training modifies parameter state and must preserve
+// deterministic seeds and numerical stability.
+// See READING_ORDER.md for the complete model/data/optimizer call path.
+
 module;
 
 #include <algorithm>
