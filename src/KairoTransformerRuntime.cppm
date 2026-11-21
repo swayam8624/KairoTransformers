@@ -71,6 +71,9 @@ export namespace kairo::transformers
     // Teaching: gather one embedding row per token ID. The token span is
     // caller-owned and IDs must be within the table vocabulary; the output
     // tensor is newly materialized for the subsequent decoder stack.
+    /// Map token IDs to rows of the model's embedding matrix. The caller
+    /// owns the tokenization policy; out-of-vocabulary IDs fail rather
+    /// than reading outside tensor storage.
     [[nodiscard]] inline Tensor<float> TokenEmbedding(
         std::span<const std::size_t> tokens,
         const Tensor<float>& table)
@@ -88,6 +91,8 @@ export namespace kairo::transformers
         return output;
     }
 
+    /// Rotate pairs of head features according to relative position;
+    /// dimensions/head widths must match the configured attention layout.
     [[nodiscard]] inline Tensor<float> ApplyRoPE(
         const Tensor<float>& input,
         std::size_t headCount,
@@ -275,6 +280,8 @@ export namespace kairo::transformers
 
     /// Returns the lowest token id among equal maximum logits. This explicit
     /// deterministic path does not consume random state.
+    /// Select the maximum-score vocabulary index deterministically;
+    /// sampling with temperature/top-k belongs to a separate path.
     [[nodiscard]] inline std::size_t GreedyToken(const Tensor<float>& logits)
     {
         if (logits.Rank() != 1 || logits.Empty())
