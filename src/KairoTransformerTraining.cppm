@@ -70,6 +70,9 @@ export namespace kairo::transformers
             down_.LoadValue(std::move(initialized));
         }
 
+        /// Compose frozen base projection with trainable LoRA down/up
+        /// matrices. Autograd should update adapters, not overwrite the
+        /// frozen inference weights without explicit policy.
         [[nodiscard]] Variable Forward(
             const Variable& input, const Tensor<float>& frozenBase) const
         {
