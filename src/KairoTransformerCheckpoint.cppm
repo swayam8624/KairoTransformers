@@ -1,3 +1,8 @@
+// SOURCE STUDY MAP:
+// Versioned weights/checkpoint persistence boundary: serializes validated tensors/settings for later
+// restore and compares shape/layout expectations against Transformers and Runtime.
+// Follow docs/SOURCE_READING_ORDER.md for tokens → attention → logits / gradients.
+
 module;
 
 #include <cstddef>
@@ -15,6 +20,9 @@ export namespace kairo::transformers
     /// Writes the complete decoder parameter set using stable version-1 names.
     /// Configuration is intentionally supplied separately so callers retain
     /// control over architecture and can validate loaded tensor shapes.
+    // Teaching: serialize a complete decoder weight bundle through the
+    // bounded tensor archive. A valid archive still requires matching model
+    // config and tensor shapes when loading in another runtime.
     inline void SaveDecoderCheckpoint(
         const std::filesystem::path& path,
         const DecoderModelWeights& weights)
@@ -54,6 +62,9 @@ export namespace kairo::transformers
 
     /// Loads one complete decoder under a per-tensor resident-byte bound.
     /// DecoderModel construction performs the final architecture shape checks.
+    // Teaching: reconstruct named tensors while enforcing archive bounds
+    // and the DecoderModelWeights schema. Never treat arbitrary model files
+    // as trusted in-memory Tensor objects without validation.
     [[nodiscard]] inline DecoderModelWeights LoadDecoderCheckpoint(
         const std::filesystem::path& path,
         const TransformerConfig& config,

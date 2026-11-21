@@ -1,3 +1,8 @@
+// SOURCE STUDY MAP:
+// Differentiable transformer/adapter training with KairoMath TensorAutograd and TensorTraining; loss and
+// optimizer updates act on declared trainable parameters, not arbitrary frozen inference weights.
+// Follow docs/SOURCE_READING_ORDER.md for tokens → attention → logits / gradients.
+
 module;
 
 #include <algorithm>
@@ -65,6 +70,9 @@ export namespace kairo::transformers
             down_.LoadValue(std::move(initialized));
         }
 
+        /// Compose frozen base projection with trainable LoRA down/up
+        /// matrices. Autograd should update adapters, not overwrite the
+        /// frozen inference weights without explicit policy.
         [[nodiscard]] Variable Forward(
             const Variable& input, const Tensor<float>& frozenBase) const
         {
@@ -183,6 +191,9 @@ export namespace kairo::transformers
             return result;
         }
 
+        // Teaching: builds the differentiable decoder graph from token IDs.
+        // TensorAutograd holds operation dependencies, so callers must keep
+        // parameters alive until backward and optimizer updates complete.
         [[nodiscard]] Variable Forward(std::span<const std::size_t> inputTokens) const
         {
             if (inputTokens.empty() || inputTokens.size() > config_.contextLength)
@@ -273,6 +284,9 @@ export namespace kairo::transformers
                 : static_cast<float>(correct) / static_cast<float>(total);
         }
 
+        // Teaching: persist trainable parameters, optimizer and random state
+        // together for a meaningful training resume, not just an inference
+        // checkpoint. The counterpart Load must restore matching layout.
         void Save(
             const std::filesystem::path& path,
             const TensorOptimizer& optimizer) 
@@ -281,6 +295,9 @@ export namespace kairo::transformers
             TensorTrainingCheckpoint::Save(path, parameters, optimizer, random_);
         }
 
+        // Teaching: restore a training checkpoint into compatible parameter
+        // shapes, optimizer state and RNG; reinitializing any of these would
+        // make a supposedly resumed optimization run different.
         void Load(
             const std::filesystem::path& path,
             TensorOptimizer& optimizer)

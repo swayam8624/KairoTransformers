@@ -1,3 +1,9 @@
+// SOURCE STUDY MAP:
+// Mathematical transformer core: validates TransformerConfig, computes token/head dimensions,
+// normalization, causal attention, feed-forward and decoder block. Runtime/Training consume these same
+// shape contracts.
+// Follow docs/SOURCE_READING_ORDER.md for tokens → attention → logits / gradients.
+
 module;
 
 #include <cstddef>
@@ -113,12 +119,17 @@ export namespace kairo::transformers
     };
 
     [[nodiscard]]
+    // Teaching: mask future tokens (column > row) so a prediction cannot
+    // access an answer that has not been generated. This rule is reused by
+    // scaled-dot-product and multi-head attention.
     inline float CausalMaskValue(std::size_t row, std::size_t column) noexcept
     {
         return column > row ? -1.0e30f : 0.0f;
     }
 
     [[nodiscard]]
+    /// Plan attention dimensions before allocating matrices: token count,
+    /// head count and width must satisfy TransformerConfig invariants.
     inline AttentionShape MakeAttentionShape(
         const TransformerConfig& config,
         std::size_t batch,
@@ -286,6 +297,9 @@ export namespace kairo::transformers
     /// No allocation or state from a previous call is retained; KV caching is
     /// intentionally a separate incremental-decoding layer.
     [[nodiscard]]
+    /// Attention scores are scaled by head width and causally masked to
+    /// prevent positions from reading future tokens. Return one value
+    /// vector per query position; caller supplies aligned Q/K/V shapes.
     inline Tensor<float> CausalScaledDotProductAttention(
         const Tensor<float>& query,
         const Tensor<float>& key,
@@ -329,6 +343,12 @@ export namespace kairo::transformers
     /// config. Each contiguous model-width row is split into `headCount`
     /// logical heads, attended causally, then packed back in the same layout.
     [[nodiscard]]
+    // Teaching: split model-width Q/K/V into head-width slices, run causal
+    // attention independently per head, then reassemble the model-width
+    // output. The config's modelWidth % headCount == 0 invariant matters.
+    /// Split model-width Q/K/V into head slices, evaluate masked attention
+    /// per head, then pack the outputs. HeadWidth comes from the validated
+    /// config; runtime layers own projection weights and residual state.
     inline Tensor<float> MultiHeadCausalAttention(
         const TransformerConfig& config,
         const Tensor<float>& query,
@@ -517,6 +537,9 @@ export namespace kairo::transformers
     /// residual branches. This path is causal and stateless; use a future KV
     /// cache component for incremental decoding rather than reusing its output.
     [[nodiscard]]
+    // Teaching: this pre-norm block applies Q/K/V projections, causal
+    // attention, an output projection and residual, then normalization, MLP
+    // and a second residual. Runtime and training must preserve this layout.
     inline Tensor<float> DecoderBlock(
         const TransformerConfig& config,
         const Tensor<float>& input,

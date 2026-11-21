@@ -1,3 +1,8 @@
+// SOURCE STUDY MAP:
+// Transformer performance measurements. Keep context length, batch, model width, CPU/GPU execution
+// environment and warmup consistent with correctness tests.
+// Follow docs/SOURCE_READING_ORDER.md for tokens → attention → logits / gradients.
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>

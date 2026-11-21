@@ -1,3 +1,8 @@
+// SOURCE STUDY MAP:
+// Inference and shape regression tests: compare tokenizer, attention mask, decoder and generation
+// behavior against the public runtime contracts.
+// Follow docs/SOURCE_READING_ORDER.md for tokens → attention → logits / gradients.
+
 // CMake Release normally defines NDEBUG, which disables C assert(). These
 // executables are acceptance tests: failures must remain observable in CI.
 #if defined(NDEBUG)

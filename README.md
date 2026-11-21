@@ -1,5 +1,7 @@
 # KairoTransformers
 
+> **Source-study guide:** Follow [docs/SOURCE_READING_ORDER.md](docs/SOURCE_READING_ORDER.md) for a linked walkthrough from token embedding through attention, quantized weights, generation, training and checkpoints. Original project source is proposed under the [MIT License](LICENSE).
+
 KairoTransformers is the transformer-model package for the Kairo ML stack. It
 defines transformer configuration, Tensor-backed CPU inference primitives,
 causal masking, and KV-cache metadata before implementing full inference and

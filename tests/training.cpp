@@ -1,3 +1,8 @@
+// SOURCE STUDY MAP:
+// Training/regression tests for autograd and parameter updates. A forward output comparison does not
+// prove backward gradients; examine explicit loss/update assertions.
+// Follow docs/SOURCE_READING_ORDER.md for tokens → attention → logits / gradients.
+
 // CMake Release normally defines NDEBUG, which disables C assert(). These
 // executables are acceptance tests: failures must remain observable in CI.
 #if defined(NDEBUG)
