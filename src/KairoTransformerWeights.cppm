@@ -58,6 +58,9 @@ export namespace kairo::transformers
 
     /// Symmetric per-output-column INT8 quantization for dense weights
     /// [inputWidth,outputWidth]. Zero columns use scale one and remain zero.
+    // Teaching: convert Float32 weights into column-scaled INT8 storage.
+    // Accuracy and scale rounding must be measured; this does not produce
+    // trainable Float32 optimizer parameters.
     [[nodiscard]] inline QuantizedMatrixInt8 QuantizeInt8(const Tensor<float>& weight)
     {
         if (weight.Rank() != 2 || weight.Empty())
@@ -121,6 +124,9 @@ export namespace kairo::transformers
         return output;
     }
 
+    // Teaching: pack two low-precision values per byte and store scales.
+    // Compare Dequantize/QuantizedMatMul with Float32 reference output and
+    // check odd element counts before relying on packed storage.
     [[nodiscard]] inline QuantizedMatrixInt4 QuantizeInt4(const Tensor<float>& weight)
     {
         if (weight.Rank() != 2 || weight.Empty())
