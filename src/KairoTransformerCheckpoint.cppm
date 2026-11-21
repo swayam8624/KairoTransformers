@@ -1,3 +1,8 @@
+// SOURCE STUDY MAP:
+// Versioned weights/checkpoint persistence boundary: serializes validated tensors/settings for later
+// restore and compares shape/layout expectations against Transformers and Runtime.
+// Follow docs/SOURCE_READING_ORDER.md for tokens → attention → logits / gradients.
+
 module;
 
 #include <cstddef>
