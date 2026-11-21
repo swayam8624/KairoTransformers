@@ -1,3 +1,9 @@
+// SOURCE STUDY MAP:
+// Mathematical transformer core: validates TransformerConfig, computes token/head dimensions,
+// normalization, causal attention, feed-forward and decoder block. Runtime/Training consume these same
+// shape contracts.
+// Follow docs/SOURCE_READING_ORDER.md for tokens → attention → logits / gradients.
+
 module;
 
 #include <cstddef>
