@@ -119,6 +119,9 @@ export namespace kairo::transformers
     };
 
     [[nodiscard]]
+    // Teaching: mask future tokens (column > row) so a prediction cannot
+    // access an answer that has not been generated. This rule is reused by
+    // scaled-dot-product and multi-head attention.
     inline float CausalMaskValue(std::size_t row, std::size_t column) noexcept
     {
         return column > row ? -1.0e30f : 0.0f;
@@ -335,6 +338,9 @@ export namespace kairo::transformers
     /// config. Each contiguous model-width row is split into `headCount`
     /// logical heads, attended causally, then packed back in the same layout.
     [[nodiscard]]
+    // Teaching: split model-width Q/K/V into head-width slices, run causal
+    // attention independently per head, then reassemble the model-width
+    // output. The config's modelWidth % headCount == 0 invariant matters.
     inline Tensor<float> MultiHeadCausalAttention(
         const TransformerConfig& config,
         const Tensor<float>& query,
@@ -523,6 +529,9 @@ export namespace kairo::transformers
     /// residual branches. This path is causal and stateless; use a future KV
     /// cache component for incremental decoding rather than reusing its output.
     [[nodiscard]]
+    // Teaching: this pre-norm block applies Q/K/V projections, causal
+    // attention, an output projection and residual, then normalization, MLP
+    // and a second residual. Runtime and training must preserve this layout.
     inline Tensor<float> DecoderBlock(
         const TransformerConfig& config,
         const Tensor<float>& input,
