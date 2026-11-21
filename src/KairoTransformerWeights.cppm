@@ -61,6 +61,9 @@ export namespace kairo::transformers
     // Teaching: convert Float32 weights into column-scaled INT8 storage.
     // Accuracy and scale rounding must be measured; this does not produce
     // trainable Float32 optimizer parameters.
+    /// Pack a Float32 weight into per-scale INT8 storage for inference.
+    /// The result is not directly interchangeable with trainable Float32
+    /// parameters; compare dequantization error and memory use.
     [[nodiscard]] inline QuantizedMatrixInt8 QuantizeInt8(const Tensor<float>& weight)
     {
         if (weight.Rank() != 2 || weight.Empty())
@@ -127,6 +130,8 @@ export namespace kairo::transformers
     // Teaching: pack two low-precision values per byte and store scales.
     // Compare Dequantize/QuantizedMatMul with Float32 reference output and
     // check odd element counts before relying on packed storage.
+    /// Pack low-bit inference weights; check scale/nibble sign decoding
+    /// and shape invariants before calling the matching QuantizedMatMul.
     [[nodiscard]] inline QuantizedMatrixInt4 QuantizeInt4(const Tensor<float>& weight)
     {
         if (weight.Rank() != 2 || weight.Empty())
