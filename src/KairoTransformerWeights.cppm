@@ -1,3 +1,9 @@
+// TEACHING MAP — src/KairoTransformerWeights.cppm
+// Defines learned parameter ownership, shape/layout constraints and initialization or
+// updates. Runtime forward computation consumes these weights; checkpoints serialize their
+// values, not device execution state.
+// See READING_ORDER.md for the complete model/data/optimizer call path.
+
 module;
 
 #include <algorithm>
