@@ -113,3 +113,12 @@ ctest --test-dir build --output-on-failure
 1. Memory-mapped safetensors metadata.
 2. Production tokenizer adapters and external checkpoint naming adapters.
 3. Larger-model benchmark baselines and CI regression comparison history.
+
+
+## Source learning pathway
+
+Follow [the linked reading order](docs/SOURCE_READING_ORDER.md) to trace module ownership, public interfaces, implementation, tests and cross-repository interaction. This path is designed for learners who want to understand both the algorithms and the API boundaries rather than just execute a sample.
+
+## Open-source learning and extension
+
+Original contributions may be learned from, modified and further developed under the applicable [LICENSE](LICENSE). Preserve required notices; external libraries, application-host SDKs, source adaptations, datasets and media retain their own terms. Check [STATUS.md](STATUS.md) and native-host evidence before treating a feature as verified.
