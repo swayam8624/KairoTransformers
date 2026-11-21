@@ -188,6 +188,9 @@ export namespace kairo::transformers
             return result;
         }
 
+        // Teaching: builds the differentiable decoder graph from token IDs.
+        // TensorAutograd holds operation dependencies, so callers must keep
+        // parameters alive until backward and optimizer updates complete.
         [[nodiscard]] Variable Forward(std::span<const std::size_t> inputTokens) const
         {
             if (inputTokens.empty() || inputTokens.size() > config_.contextLength)
@@ -278,6 +281,9 @@ export namespace kairo::transformers
                 : static_cast<float>(correct) / static_cast<float>(total);
         }
 
+        // Teaching: persist trainable parameters, optimizer and random state
+        // together for a meaningful training resume, not just an inference
+        // checkpoint. The counterpart Load must restore matching layout.
         void Save(
             const std::filesystem::path& path,
             const TensorOptimizer& optimizer) 
@@ -286,6 +292,9 @@ export namespace kairo::transformers
             TensorTrainingCheckpoint::Save(path, parameters, optimizer, random_);
         }
 
+        // Teaching: restore a training checkpoint into compatible parameter
+        // shapes, optimizer state and RNG; reinitializing any of these would
+        // make a supposedly resumed optimization run different.
         void Load(
             const std::filesystem::path& path,
             TensorOptimizer& optimizer)
