@@ -1,3 +1,4 @@
+// TEACHING MAP: Umbrella C++23 transformer interface connects runtime attention blocks, weights, checkpoint and training modules. Tensor/ONNX/GPU have distinct support boundaries; do not infer universal model compatibility.
 module;
 
 #include <cstddef>
