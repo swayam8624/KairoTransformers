@@ -68,6 +68,9 @@ export namespace kairo::transformers
         }
     };
 
+    // Teaching: gather one embedding row per token ID. The token span is
+    // caller-owned and IDs must be within the table vocabulary; the output
+    // tensor is newly materialized for the subsequent decoder stack.
     [[nodiscard]] inline Tensor<float> TokenEmbedding(
         std::span<const std::size_t> tokens,
         const Tensor<float>& table)
@@ -344,6 +347,9 @@ export namespace kairo::transformers
 
         [[nodiscard]] const TransformerConfig& Config() const noexcept { return config_; }
 
+        // Teaching: full-sequence forward pass for scoring; unlike Decode,
+        // it does not rely on a caller-maintained incremental KV cache.
+        // Validate context length and tensor shapes before every layer.
         [[nodiscard]] Tensor<float> Forward(std::span<const std::size_t> tokens) const
         {
             if (tokens.empty() || tokens.size() > config_.contextLength)
@@ -392,6 +398,9 @@ export namespace kairo::transformers
             return Dense(hidden, weights_.languageModelHead, weights_.languageModelBias);
         }
 
+        // Teaching: token-generation loop repeatedly chooses a new token
+        // from logits and advances the per-layer cache. Selection policy and
+        // stop conditions are part of this API, not the Tokenizer abstraction.
         [[nodiscard]] std::vector<std::size_t> Generate(
             std::vector<std::size_t> tokens,
             std::size_t newTokenCount,
