@@ -1,3 +1,9 @@
+// TEACHING MAP — src/KairoTransformers.cppm
+// Public C++23 transformer component API. Imports or exposes configuration, mask/tensor
+// shapes and decoder contracts; runtime, weight storage, training and checkpoints are
+// separate modules.
+// See READING_ORDER.md for the complete model/data/optimizer call path.
+
 module;
 
 #include <cstddef>
