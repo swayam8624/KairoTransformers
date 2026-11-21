@@ -1,3 +1,9 @@
+// SOURCE STUDY MAP:
+// Dense/quantized weight representations and packing. INT8/INT4 inference storage uses scales and packed
+// values; checkpoint and training paths must distinguish these from writable floating-point optimizer
+// parameters.
+// Follow docs/SOURCE_READING_ORDER.md for tokens → attention → logits / gradients.
+
 module;
 
 #include <algorithm>
