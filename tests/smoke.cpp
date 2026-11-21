@@ -1,3 +1,9 @@
+// TEACHING MAP — tests/smoke.cpp
+// Checks public Transformer configuration, mask and runtime shape/forward invariants. A
+// successful small smoke test does not establish production-scale language-model
+// correctness.
+// See READING_ORDER.md for the complete model/data/optimizer call path.
+
 // CMake Release normally defines NDEBUG, which disables C assert(). These
 // executables are acceptance tests: failures must remain observable in CI.
 #if defined(NDEBUG)
