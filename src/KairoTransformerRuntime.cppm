@@ -1,3 +1,9 @@
+// SOURCE STUDY MAP:
+// Forward/generation execution facade: Tokenizer and ByteTokenizer produce token IDs, model weights and
+// KairoMath tensors compute embeddings and decoder blocks, and generation returns IDs for Decode.
+// Compare training's differentiable graph.
+// Follow docs/SOURCE_READING_ORDER.md for tokens → attention → logits / gradients.
+
 module;
 
 #include <algorithm>
