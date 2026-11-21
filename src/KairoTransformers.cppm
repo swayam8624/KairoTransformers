@@ -128,6 +128,8 @@ export namespace kairo::transformers
     }
 
     [[nodiscard]]
+    /// Plan attention dimensions before allocating matrices: token count,
+    /// head count and width must satisfy TransformerConfig invariants.
     inline AttentionShape MakeAttentionShape(
         const TransformerConfig& config,
         std::size_t batch,
@@ -295,6 +297,9 @@ export namespace kairo::transformers
     /// No allocation or state from a previous call is retained; KV caching is
     /// intentionally a separate incremental-decoding layer.
     [[nodiscard]]
+    /// Attention scores are scaled by head width and causally masked to
+    /// prevent positions from reading future tokens. Return one value
+    /// vector per query position; caller supplies aligned Q/K/V shapes.
     inline Tensor<float> CausalScaledDotProductAttention(
         const Tensor<float>& query,
         const Tensor<float>& key,
@@ -341,6 +346,9 @@ export namespace kairo::transformers
     // Teaching: split model-width Q/K/V into head-width slices, run causal
     // attention independently per head, then reassemble the model-width
     // output. The config's modelWidth % headCount == 0 invariant matters.
+    /// Split model-width Q/K/V into head slices, evaluate masked attention
+    /// per head, then pack the outputs. HeadWidth comes from the validated
+    /// config; runtime layers own projection weights and residual state.
     inline Tensor<float> MultiHeadCausalAttention(
         const TransformerConfig& config,
         const Tensor<float>& query,
