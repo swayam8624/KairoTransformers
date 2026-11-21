@@ -1,3 +1,8 @@
+// SOURCE STUDY MAP:
+// Differentiable transformer/adapter training with KairoMath TensorAutograd and TensorTraining; loss and
+// optimizer updates act on declared trainable parameters, not arbitrary frozen inference weights.
+// Follow docs/SOURCE_READING_ORDER.md for tokens → attention → logits / gradients.
+
 module;
 
 #include <algorithm>
