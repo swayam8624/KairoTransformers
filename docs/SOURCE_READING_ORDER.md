@@ -5,6 +5,19 @@ Decoder/attention components built on bounded tensor and scheduling interfaces.
 
 Read these source links in order, identify the caller and callee for each public API, then check the error/ownership contract and its tests.
 
+## Detailed source tutorial: follow one token from ID to loss
+
+1. [`src/KairoTransformers.cppm`](../src/KairoTransformers.cppm) — configuration/shape guards, masks, normalization, QKV projection, rotary encoding, attention, MLP and transformer block calculations.
+2. [`src/KairoTransformerWeights.cppm`](../src/KairoTransformerWeights.cppm) — dense/quantized parameter formats and INT8/INT4 packing. Distinguish compressed data representation from a correct numerical kernel.
+3. [`src/KairoTransformerRuntime.cppm`](../src/KairoTransformerRuntime.cppm) — tokenizer abstraction, byte tokenizer, embedding table, generation and KV-cache state.
+4. [`src/KairoTransformerCheckpoint.cppm`](../src/KairoTransformerCheckpoint.cppm) — checkpoint save/load, dimensions, schema/version and actual serialized state. File persistence is not evidence of exact training resumption unless optimizer/RNG are present.
+5. [`src/KairoTransformerTraining.cppm`](../src/KairoTransformerTraining.cppm) — autograd graph, loss, optimizer, and bounded low-rank fine-tuning path.
+6. [`tests/smoke.cpp`](../tests/smoke.cpp), [`tests/training.cpp`](../tests/training.cpp), [`tests/benchmark.cpp`](../tests/benchmark.cpp) — numerics, shape failures, training updates and timing evidence. Test *source* is not a test *run*.
+
+**Cross-file call trace:** token IDs → embedding lookup → attention projection and RoPE → causal attention with optional KV history → residual/normalization/MLP layers → logits → optional training loss and backpropagation → updated weights and checkpoint. The runtime and training modules consume data layouts established by the model/weight modules; KairoMath handles owning tensor values, and unsupported backends do not become functional merely by being described in a configuration enum.
+
+**Exercises:** derive attention score shapes for one head and a multi-head batch; trace the `past_length` index through a KV cache append; compare an unquantized weight path with dequantization and error tolerance; identify exactly which checkpoint fields restore optimizer/RNG state; verify whether generated-token sampling is deterministic with the supplied seed. Use fixed fixtures and run native tests before claiming numerical parity.
+
 ## Reading order
 
 1. [`README.md`](../README.md)
