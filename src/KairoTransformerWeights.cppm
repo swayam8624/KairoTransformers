@@ -52,6 +52,10 @@ export namespace kairo::transformers
 
     /// Symmetric per-output-column INT8 quantization for dense weights
     /// [inputWidth,outputWidth]. Zero columns use scale one and remain zero.
+    // Per-output-column symmetric INT8 quantization for [in,out] weights.
+    // The scale is max(abs(column))/127 (zero columns use scale one);
+    // round/clamp into signed [-127,127]. Representational error is expected:
+    // report output parity relative to Float32 rather than exact equality.
     [[nodiscard]] inline QuantizedMatrixInt8 QuantizeInt8(const Tensor<float>& weight)
     {
         if (weight.Rank() != 2 || weight.Empty())
@@ -79,6 +83,9 @@ export namespace kairo::transformers
         return result;
     }
 
+    // Reconstruct a dense Float32 matrix by value*per-column scale. This
+    // allocates new Tensor storage; it does not restore lost quantization
+    // precision or mutate the packed weight representation.
     [[nodiscard]] inline Tensor<float> Dequantize(const QuantizedMatrixInt8& weight)
     {
         if (weight.rows == 0 || weight.columns == 0
@@ -95,6 +102,10 @@ export namespace kairo::transformers
     }
 
     /// Float32 activation x INT8 weight with Float32 accumulation.
+    // Reference mixed-format GEMM: Float32 input × quantized INT8 weight,
+    // accumulate Float32 sums then apply each output column's scale. The
+    // matrix dimensions must match; this is a CPU loop, not proof of a SIMD
+    // or fused device kernel.
     [[nodiscard]] inline Tensor<float> QuantizedMatMul(
         const Tensor<float>& input, const QuantizedMatrixInt8& weight)
     {
@@ -115,6 +126,10 @@ export namespace kairo::transformers
         return output;
     }
 
+    // Per-column signed INT4 quantization maps [-7,7] to nibbles [1,15]
+    // using an offset of eight. Two values share one byte: even element in
+    // low nibble, odd in high nibble; scale=max(abs(column))/7.
+    // Verify odd element counts and byte packing order against the reader.
     [[nodiscard]] inline QuantizedMatrixInt4 QuantizeInt4(const Tensor<float>& weight)
     {
         if (weight.Rank() != 2 || weight.Empty())
@@ -149,6 +164,9 @@ export namespace kairo::transformers
         return result;
     }
 
+    // Unpack the linear nibble index, subtract offset eight, multiply by
+    // Float32 activations, then apply per-output-column scale. Packing
+    // changes storage, not the required [inputWidth,outputWidth] math contract.
     [[nodiscard]] inline Tensor<float> QuantizedMatMul(
         const Tensor<float>& input, const QuantizedMatrixInt4& weight)
     {
@@ -188,6 +206,10 @@ export namespace kairo::transformers
     class BoundedTensorArchive final
     {
     public:
+        // Save named tensors in the bounded archive format; readers must
+        // validate size/shape and filename provenance before reconstructing
+        // model configuration. This is the weight archive, not necessarily
+        // a complete optimizer/RNG training checkpoint.
         static void Save(
             const std::filesystem::path& path,
             const std::vector<NamedTensor>& tensors)
@@ -249,6 +271,9 @@ export namespace kairo::transformers
 
         [[nodiscard]] std::size_t TensorCount() const noexcept { return entries_.size(); }
 
+        // Load one named Tensor under a caller-supplied resident byte limit.
+        // Return owning storage; absent names or invalid archive metadata
+        // should fail rather than inserting a fabricated zero tensor.
         [[nodiscard]] Tensor<float> Load(
             const std::string& name, std::size_t maximumBytes) const
         {
@@ -324,6 +349,9 @@ export namespace kairo::transformers
             return std::fread(data, 1, bytes, file) == bytes;
         }
 
+        // Parse archive entry metadata into the name->offset index, checking
+        // length bounds before file access. For detailed persistence semantics,
+        // follow KairoTransformerCheckpoint.cppm's decoder-name mapping.
         void Index()
         {
             std::FILE* file = std::fopen(path_.c_str(), "rb");
