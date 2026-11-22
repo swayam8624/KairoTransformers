@@ -1,3 +1,16 @@
+// TEACHING MODULE: TrainableDecoder creates TensorAutograd parameters
+// and performs selected next-token training via categorical loss,
+// optimizer updates and optional gradient checkpointing. This is a
+// bounded training surface, not a guarantee of large-scale LLM training.
+//
+// LoRAProjection adds low-rank A*B updates to a frozen base projection,
+// scaled by alpha/rank. Distinguish these trainable adapter values from
+// full dense model weights. Gradient accumulation must manage scale
+// and clearing across microbatches before an optimizer step.
+//
+// TensorTrainingCheckpoint saves parameters, complete optimizer state
+// and RNG so resumed runs can be compared with uninterrupted training.
+ // Verify actual parameter shapes/orders and deterministic test seeds.
 module;
 
 #include <algorithm>
@@ -42,6 +55,8 @@ export namespace kairo::transformers
 
     /// Low-rank trainable update for a frozen dense matrix:
     /// output = input*base + (alpha/rank)*(input*down)*up.
+    // Trainable low-rank adapter with immutable base projection; its
+    // rank/scale and input-output dimensions determine the update.
     class LoRAProjection final
     {
     public:
@@ -135,6 +150,8 @@ export namespace kairo::transformers
     /// out of the core parameter set so corpus-overfit tests exercise attention,
     /// embeddings, MLP, residual, normalization, and language-head gradients
     /// directly.
+    // Owns trainable layer variables, random state and optimizer-facing
+    // parameter order. Inference DecoderModel owns a distinct weight API.
     class TrainableDecoder final
     {
     public:
