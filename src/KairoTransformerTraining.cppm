@@ -155,6 +155,9 @@ export namespace kairo::transformers
     class TrainableDecoder final
     {
     public:
+        // Own trainable embedding/head matrices, layer variables and the seeded
+        // TrainingRandom stream. Training has a separate API from inference
+        // DecoderModel, but both use TransformerConfig shapes and KairoMath.
         explicit TrainableDecoder(
             TransformerConfig config,
             std::uint64_t seed = 0x545241494E4552ULL)
@@ -175,6 +178,8 @@ export namespace kairo::transformers
 
         [[nodiscard]] const TransformerConfig& Config() const noexcept { return config_; }
         [[nodiscard]] TrainingRandom& Random() noexcept { return random_; }
+        // Recompute layer activations during backward to trade extra compute
+        // for lower retained autograd memory. Not a disk save/load checkpoint.
         void SetGradientCheckpointing(bool enabled) noexcept
         {
             gradientCheckpointing_ = enabled;
@@ -184,6 +189,9 @@ export namespace kairo::transformers
             return gradientCheckpointing_;
         }
 
+        // Return borrowed pointers in stable order: embeddings, each layer's
+        // projections and MLP, then head. Optimizer/checkpoints rely on this
+        // order and pointers die when the TrainableDecoder is destroyed.
         [[nodiscard]] std::vector<Variable*> Parameters()
         {
             std::vector<Variable*> result{ &embedding_ };
@@ -200,6 +208,9 @@ export namespace kairo::transformers
             return result;
         }
 
+        // Embed token IDs and evaluate every decoder autograd layer. Optional
+        // recomputation checkpoints preserve gradient connectivity; final
+        // projection outputs [sequence,vocabulary] logits for loss/training.
         [[nodiscard]] Variable Forward(std::span<const std::size_t> inputTokens) const
         {
             if (inputTokens.empty() || inputTokens.size() > config_.contextLength)
@@ -222,6 +233,9 @@ export namespace kairo::transformers
                 AutogradLayerNormLastDim(hidden, 1e-5f), languageHead_);
         }
 
+        // Convert target IDs into one-hot labels, requiring matching input/
+        // target sequence lengths and valid vocabulary IDs, then compute a
+        // softmax cross-entropy objective from forward token logits.
         [[nodiscard]] Variable Loss(
             std::span<const std::size_t> inputTokens,
             std::span<const std::size_t> targetTokens) const
@@ -241,6 +255,10 @@ export namespace kairo::transformers
 
         /// Accumulates gradients over all supplied sequences and performs one
         /// optimizer step divided by sequence count.
+        // Clear parameter grads once, Backward each sequence's loss, and
+        // TensorOptimizer::Step after all sequences with its gradient-count
+        // divisor. Return mean training loss, in-sample token accuracy and
+        // completed optimizer-step count, not held-out generalization.
         [[nodiscard]] TransformerTrainingMetrics TrainAccumulated(
             const std::vector<std::vector<std::size_t>>& inputSequences,
             const std::vector<std::vector<std::size_t>>& targetSequences,
@@ -267,6 +285,9 @@ export namespace kairo::transformers
             };
         }
 
+        // Re-evaluate current model on supplied sequences and count argmax
+        // token matches; this is in-sample training accuracy unless callers
+        // explicitly pass separate held-out sequences.
         [[nodiscard]] float Accuracy(
             const std::vector<std::vector<std::size_t>>& inputSequences,
             const std::vector<std::vector<std::size_t>>& targetSequences) const
@@ -290,6 +311,9 @@ export namespace kairo::transformers
                 : static_cast<float>(correct) / static_cast<float>(total);
         }
 
+        // Persist parameters AND TensorOptimizer/TrainingRandom state through
+        // KairoMath's TensorTrainingCheckpoint. Distinguish this from decoder
+        // inference weight archives and MLLibrary's KMLCP01 weights-only file.
         void Save(
             const std::filesystem::path& path,
             const TensorOptimizer& optimizer) 
@@ -298,6 +322,9 @@ export namespace kairo::transformers
             TensorTrainingCheckpoint::Save(path, parameters, optimizer, random_);
         }
 
+        // Restore compatible parameter list, optimizer and RNG. Verify
+        // matching architecture, tensor order and next-step parity before
+        // claiming reproducible resumption on other compilers/devices.
         void Load(
             const std::filesystem::path& path,
             TensorOptimizer& optimizer)
