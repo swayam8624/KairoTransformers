@@ -1,4 +1,18 @@
-// TEACHING MAP: Umbrella C++23 transformer interface connects runtime attention blocks, weights, checkpoint and training modules. Tensor/ONNX/GPU have distinct support boundaries; do not infer universal model compatibility.
+// TEACHING MAP: Base transformer numerical contracts use KairoMath Tensor:
+// configuration/shapes, normalization, positional encoding, fused QKV,
+// causal attention and feed-forward operations.
+//
+// Attention uses q*k^T/sqrt(headWidth) with a causal mask to prevent
+// looking ahead; row-wise normalized probabilities mix value vectors.
+// Head splitting/concatenation and KV-cache growth require consistent
+// sequence/width conventions and contiguous Tensor storage. The module
+// is bounded to implemented CPU operators, not arbitrary architecture
+// compatibility or full model-serving/GPU training.
+//
+// Runtime tokenization/KV cache, trainable autograd parameters, LoRA
+// and checkpoint serialization are separate named modules. Verify each
+// against KairoMath's Tensor/Autograd/Training contracts before
+// interpreting a throughput or convergence benchmark.
 module;
 
 #include <cstddef>
@@ -287,6 +301,9 @@ export namespace kairo::transformers
     /// No allocation or state from a previous call is retained; KV caching is
     /// intentionally a separate incremental-decoding layer.
     [[nodiscard]]
+    // Causal mask excludes future positions. Verify softmax stability
+    // and head-width scale, plus attention probabilities/row sums
+    // against a small independent implementation.
     inline Tensor<float> CausalScaledDotProductAttention(
         const Tensor<float>& query,
         const Tensor<float>& key,
