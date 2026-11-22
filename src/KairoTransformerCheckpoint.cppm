@@ -5,6 +5,9 @@ module;
 #include <string>
 #include <vector>
 
+// Public C++23 checkpoint module for INFERENCE weights, not the optimizer
+// checkpoint. SaveDecoderCheckpoint and LoadDecoderCheckpoint name every
+// tensor consistently and use Weights/BoundedTensorArchive for persistence.
 export module Kairo.Transformers.Checkpoint;
 
 export import Kairo.Transformers.Runtime;
@@ -15,6 +18,10 @@ export namespace kairo::transformers
     /// Writes the complete decoder parameter set using stable version-1 names.
     /// Configuration is intentionally supplied separately so callers retain
     /// control over architecture and can validate loaded tensor shapes.
+    // Map decoder weights to stable archive keys: embedding, final norm,
+    // LM head and each block's attention/feed-forward parameters. The file
+    // does not encode all external TransformerConfig or optimizer/RNG state;
+    // callers must retain architecture config and independently validate it.
     inline void SaveDecoderCheckpoint(
         const std::filesystem::path& path,
         const DecoderModelWeights& weights)
@@ -54,6 +61,10 @@ export namespace kairo::transformers
 
     /// Loads one complete decoder under a per-tensor resident-byte bound.
     /// DecoderModel construction performs the final architecture shape checks.
+    // Open a BoundedTensorArchive and load each named tensor under a per-
+    // tensor byte ceiling. Reconstruct the expected layer array according
+    // to the caller's TransformerConfig; DecoderModel later validates shape.
+    // This returns owning tensors, not a resumed trainable optimizer.
     [[nodiscard]] inline DecoderModelWeights LoadDecoderCheckpoint(
         const std::filesystem::path& path,
         const TransformerConfig& config,
