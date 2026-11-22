@@ -1,5 +1,5 @@
 # Teaching source map — KairoTransformers
-**Deep source walkthrough:** [Tokens, attention, KV caching and training](TRANSFORMER_FROM_TOKENS_TO_TRAINING.md).
+**Deep source walkthrough:** [Tokens, attention, KV caching and training](TRANSFORMER_FROM_TOKENS_TO_TRAINING.md). [Advanced source lab: cached decoding, quantization and exact state](TRANSFORMER_MODEL_STATE_AND_QUANTIZATION_LAB.md).
 
 Decoder/attention components built on bounded tensor and scheduling interfaces.
 
