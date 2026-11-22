@@ -1,5 +1,5 @@
 # KairoTransformers
-**Deep source walkthrough:** [Tokens, attention, KV caching and training](docs/TRANSFORMER_FROM_TOKENS_TO_TRAINING.md).
+**Deep source walkthrough:** [Tokens, attention, KV caching and training](docs/TRANSFORMER_FROM_TOKENS_TO_TRAINING.md). [Advanced attention, KV cache, INT4/INT8, training checkpoints](docs/TRANSFORMER_MODEL_STATE_AND_QUANTIZATION_LAB.md).
 
 KairoTransformers is the transformer-model package for the Kairo ML stack. It
 defines transformer configuration, Tensor-backed CPU inference primitives,
