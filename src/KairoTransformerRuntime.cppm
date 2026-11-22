@@ -1,3 +1,14 @@
+// TEACHING MODULE: DecoderModel implements bounded token inference on
+// KairoMath Tensor. Tokenizer converts text to integer tokens; embeddings,
+// per-layer normalization, attention and FFN produce logits. Generation
+// chooses tokens with declared sampling/seed and context-length limits.
+//
+// KVCache stores per-layer key/value history to avoid recomputing all
+// previous attention scores at every autoregressive step. Cache shape,
+ // append continuity, position and batch assumptions must be checked:
+ // this implementation requires batch one for its KV-cache path.
+ // Generation with and without cache should match a reference for
+ // deterministic greedy decoding under the same model weights.
 module;
 
 #include <algorithm>
@@ -126,6 +137,9 @@ export namespace kairo::transformers
     }
 
     /// Per-layer cache in [layer,position,head,channel] logical layout.
+    // Cached attention state is owned by one decoder generation session.
+    // Never reuse between different model weights, prompt streams or
+    // incompatible context/position configuration.
     class KVCache final
     {
     public:
@@ -324,6 +338,8 @@ export namespace kairo::transformers
         return candidates.back().second;
     }
 
+    // Owns decoder configuration and weights. Forward recomputes a
+    // complete sequence; cached stepping reuses incremental KV state.
     class DecoderModel final
     {
     public:
