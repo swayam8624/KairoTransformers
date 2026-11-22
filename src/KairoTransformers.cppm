@@ -128,12 +128,18 @@ export namespace kairo::transformers
     };
 
     [[nodiscard]]
+    // A future key position is assigned a large negative additive score,
+    // so softmax virtually removes it. The reference attention loops below
+    // instead iterate only column<=row for an explicit causal boundary.
     inline float CausalMaskValue(std::size_t row, std::size_t column) noexcept
     {
         return column > row ? -1.0e30f : 0.0f;
     }
 
     [[nodiscard]]
+    // Derive shape metadata [batch,sequence,heads,headWidth] from the model
+    // config. Counts help plan storage but do not allocate the Q/K/V tensors;
+    // callers must check integer overflow separately for extreme dimensions.
     inline AttentionShape MakeAttentionShape(
         const TransformerConfig& config,
         std::size_t batch,
@@ -152,6 +158,8 @@ export namespace kairo::transformers
     }
 
     [[nodiscard]]
+    // Describe key+value cache capacity for all layers and positions. Actual
+    // incremental ownership/contiguous appends live in Runtime::KVCache.
     inline KVCacheDesc MakeKVCacheDesc(const TransformerConfig& config, std::size_t batch)
     {
         if (!config.Valid())
@@ -168,6 +176,9 @@ export namespace kairo::transformers
     }
 
     [[nodiscard]]
+    // Rough analytical parameter count for embeddings, attention, MLP and
+    // norms; this is planning metadata, not a reading of actual checkpoint
+    // or archive storage. Verify whether model head/extra terms are included.
     inline std::size_t ParameterCountEstimate(const TransformerConfig& config)
     {
         if (!config.Valid())
@@ -185,6 +196,9 @@ export namespace kairo::transformers
     /// Input: [rows, width] activations plus [width] scale and bias vectors.
     /// Output: row-wise LayerNorm with epsilon-stabilized variance.
     [[nodiscard]]
+    // Per-row mean and variance across hidden width, followed by learned
+    // scale and bias. Epsilon avoids division by zero; this is distinct from
+    // RMSNorm in KairoTransformerRuntime.cppm (which does not center values).
     inline Tensor<float> LayerNorm(
         const Tensor<float>& input,
         const Tensor<float>& scale,
@@ -219,6 +233,8 @@ export namespace kairo::transformers
     }
 
     [[nodiscard]]
+    // Elementwise tanh-approximate GELU, not the exact Gaussian CDF formula.
+    // Expect small numerical discrepancies when comparing external frameworks.
     inline Tensor<float> GELU(const Tensor<float>& input)
     {
         return input.Map([](float value)
@@ -232,6 +248,9 @@ export namespace kairo::transformers
     /// base. Output: [sequence, modelWidth] deterministic sinusoidal positions.
     /// Even channels contain sine and odd channels contain cosine.
     [[nodiscard]]
+    // Deterministic [sequence,width] sine/cosine position signals with
+    // frequency decreasing by even channel index. This absolute encoding
+    // is separate from rotary Q/K position handling in runtime decoding.
     inline Tensor<float> SinusoidalEncoding(
         std::size_t sequence,
         std::size_t modelWidth,
@@ -266,6 +285,9 @@ export namespace kairo::transformers
     /// contiguous output channels into Q, K, and V tensors. This is the public
     /// fusion boundary used by optimized CPU and GPU backends.
     [[nodiscard]]
+    // One MatMul with packed [input,3*output] weights plus bias, then copy
+    // contiguous channel slices into owning query, key and value tensors.
+    // This is a fusion-friendly API boundary, not proof of a single GPU op.
     inline QKVProjection FusedQKVProjection(
         const Tensor<float>& input,
         const Tensor<float>& weight,
@@ -347,6 +369,9 @@ export namespace kairo::transformers
     /// config. Each contiguous model-width row is split into `headCount`
     /// logical heads, attended causally, then packed back in the same layout.
     [[nodiscard]]
+    // Split full model width into independent equal-width heads, apply the
+    // single-head causal reference loop to each, and concatenate results.
+    // Allocation is temporary; incremental KV reuse is implemented in Runtime.
     inline Tensor<float> MultiHeadCausalAttention(
         const TransformerConfig& config,
         const Tensor<float>& query,
@@ -394,6 +419,9 @@ export namespace kairo::transformers
     /// Query heads are divided evenly among fewer key/value heads.
     /// `keyValueHeads == 1` is multi-query attention.
     [[nodiscard]]
+    // Share one key/value head among multiple query heads (GQA; MQA when only
+    // one KV head exists). Query head count must divide by KV head count;
+    // attention is still causally masked and scaled by inverse sqrt(width).
     inline Tensor<float> GroupedQueryCausalAttention(
         const Tensor<float>& query,
         const Tensor<float>& key,
@@ -451,6 +479,9 @@ export namespace kairo::transformers
     /// [modelWidth, feedForwardWidth] and [feedForwardWidth, modelWidth], and
     /// their matching bias vectors. Output preserves [sequence, modelWidth].
     [[nodiscard]]
+    // Apply [modelWidth,ffWidth] projection, one configured nonlinearity
+    // (ReLU/GELU/SiLU), then [ffWidth,modelWidth] projection. Every addition
+    // of learned bias preserves the [sequence,*] feature dimensions.
     inline Tensor<float> FeedForward(
         const TransformerConfig& config,
         const Tensor<float>& input,
@@ -483,6 +514,9 @@ export namespace kairo::transformers
     }
 
     [[nodiscard]]
+    // Require exact same rank and shape; a residual is an elementwise sum,
+    // not a broadcast or a new token dimension. Enables gradient fanout when
+    // composed through KairoMath autograd in the separate training module.
     inline Tensor<float> AddResidual(const Tensor<float>& input, const Tensor<float>& branch)
     {
         if (input.Rank() != branch.Rank()) throw std::invalid_argument("Residual tensors must have equal shapes.");
@@ -533,8 +567,13 @@ export namespace kairo::transformers
     /// Input: token activations [sequence, modelWidth] and all parameters for
     /// one decoder block. Output: same shape after pre-norm attention and MLP
     /// residual branches. This path is causal and stateless; use a future KV
-    /// cache component for incremental decoding rather than reusing its output.
+    /// cache in KairoTransformerRuntime.cppm for incremental decoding instead.
     [[nodiscard]]
+    // Pre-norm attention residual then pre-norm feed-forward residual:
+    // LayerNorm -> Dense Q/K/V -> MultiHeadCausalAttention -> projected branch
+    // -> AddResidual -> LayerNorm -> FeedForward -> AddResidual. This stateless
+    // path recomputes the whole sequence; incremental KV caching is already
+    // implemented in KairoTransformerRuntime.cppm::DecoderModel::Decode.
     inline Tensor<float> DecoderBlock(
         const TransformerConfig& config,
         const Tensor<float>& input,
