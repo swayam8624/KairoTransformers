@@ -73,6 +73,9 @@ export namespace kairo::transformers
         }
     };
 
+    // Map validated token IDs to the embedding table's rows. The resulting
+    // Tensor owns the gathered Float32 vectors; output row count is the
+    // sequence length, width is TransformerConfig::modelWidth.
     [[nodiscard]] inline Tensor<float> TokenEmbedding(
         std::span<const std::size_t> tokens,
         const Tensor<float>& table)
@@ -122,6 +125,9 @@ export namespace kairo::transformers
         return output;
     }
 
+    // Apply KairoMath's last-dimension RMSNorm to decoder hidden features,
+    // optionally scaling with a learned vector. RMSNorm differs from LayerNorm
+    // because it does not center by subtracting the per-row mean.
     [[nodiscard]] inline Tensor<float> RMSNorm(
         const Tensor<float>& input,
         const Tensor<float>& scale,
@@ -170,6 +176,8 @@ export namespace kairo::transformers
             return keys_.Size() + values_.Size();
         }
 
+        // Reset per-layer lengths and clear key/value backing tensors. A
+        // reused cache with a new prompt must start from this clean state.
         void Clear()
         {
             keys_.Fill(0.0f);
@@ -177,12 +185,18 @@ export namespace kairo::transformers
             std::fill(lengths_.begin(), lengths_.end(), 0);
         }
 
+        // Report how many *contiguous* token positions were appended for
+        // this decoder layer; an invalid layer index is not silently clamped.
         [[nodiscard]] std::size_t Length(std::size_t layer) const
         {
             if (layer >= lengths_.size()) throw std::out_of_range("KV cache layer out of range.");
             return lengths_[layer];
         }
 
+        // Append the next token's keys/values at exactly Length(layer).
+        // Storage is [layer,batch,context,KV-head,head-width]. Grouped-query
+        // attention is permitted when query head count divides by KV heads;
+        // skipping positions or changing widths is rejected before writing.
         void Append(
             std::size_t layer,
             std::size_t position,
@@ -208,6 +222,10 @@ export namespace kairo::transformers
             ++lengths_[layer];
         }
 
+        // For one token, compute scaled q·k across all cached positions,
+        // stable softmax each query head, then combine cached values. Several
+        // query heads may share one KV head; this is CPU attention over data
+        // owned by KVCache and never fetches a GPU command buffer.
         [[nodiscard]] Tensor<float> Attend(
             std::size_t layer, const Tensor<float>& query) const
         {
@@ -280,6 +298,8 @@ export namespace kairo::transformers
 
     /// Returns the lowest token id among equal maximum logits. This explicit
     /// deterministic path does not consume random state.
+    // Choose maximum logit deterministically, resolving ties to lowest ID.
+    // No RNG state is sampled or advanced by the greedy path.
     [[nodiscard]] inline std::size_t GreedyToken(const Tensor<float>& logits)
     {
         if (logits.Rank() != 1 || logits.Empty())
@@ -290,6 +310,10 @@ export namespace kairo::transformers
         return selected;
     }
 
+    // Temperature scales logits; top-K truncates sorted candidates; top-P
+    // truncates by cumulative normalized probability. The TrainingRandom
+    // stream then samples the remaining set. This is not a secure RNG.
+    // Same seed and logits are required to reproduce one sampling trajectory.
     [[nodiscard]] inline std::size_t SampleLogits(
         const Tensor<float>& logits,
         SamplingConfig config,
@@ -354,6 +378,9 @@ export namespace kairo::transformers
 
         [[nodiscard]] const TransformerConfig& Config() const noexcept { return config_; }
 
+        // Full-sequence inference without KV reuse: embed all tokens, apply
+        // decoder layers with causal masking, final normalization and LM head.
+        // Compare to Decode() token-by-token to test cache parity.
         [[nodiscard]] Tensor<float> Forward(std::span<const std::size_t> tokens) const
         {
             if (tokens.empty() || tokens.size() > config_.contextLength)
@@ -367,6 +394,10 @@ export namespace kairo::transformers
         }
 
         /// Decodes exactly one token at the requested contiguous cache position.
+        // Single-position inference: embed the next token, project Q/K/V,
+        // apply rotary position, append K/V for every layer, attend over cache,
+        // process residual+MLP, and compute logits for THIS position.
+        // Cache mutation requires consecutive positions to preserve order.
         [[nodiscard]] Tensor<float> Decode(
             std::size_t token, std::size_t position, KVCache& cache) const
         {
@@ -402,6 +433,9 @@ export namespace kairo::transformers
             return Dense(hidden, weights_.languageModelHead, weights_.languageModelBias);
         }
 
+        // Prime a new KV cache using the prompt, then sample new tokens from
+        // the last position's logits with a locally seeded random stream.
+        // The returned vector contains original prompt plus generated IDs.
         [[nodiscard]] std::vector<std::size_t> Generate(
             std::vector<std::size_t> tokens,
             std::size_t newTokenCount,
@@ -425,6 +459,9 @@ export namespace kairo::transformers
             return tokens;
         }
 
+        // Same cache-priming and incremental decoding as Generate, but use
+        // GreedyToken rather than temperature/top-K/top-P sampling. Useful
+        // for determinism and cached-versus-full-sequence parity tests.
         [[nodiscard]] std::vector<std::size_t> GenerateGreedy(
             std::vector<std::size_t> tokens,
             std::size_t newTokenCount) const
@@ -478,6 +515,9 @@ export namespace kairo::transformers
                 weights.feedForwardSecondWeight, weights.feedForwardSecondBias));
         }
 
+        // Check decoder config and every tensor's expected shape/role before
+        // inference. Parameter storage belongs to this DecoderModel instance;
+        // a named checkpoint is loaded through the separate checkpoint API.
         void Validate() const
         {
             if (!config_.Valid() || weights_.blocks.size() != config_.layerCount
